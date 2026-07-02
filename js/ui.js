@@ -10,10 +10,13 @@ function showPage(n) {
   }
   document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
   document.querySelectorAll('.nav-item').forEach(b => b.classList.remove('active'));
+  document.querySelectorAll('.tab-item').forEach(b => b.classList.remove('active'));
   const page = document.getElementById('page-' + n);
   const nav  = document.getElementById('nav-' + n);
   if (page) page.classList.add('active');
   if (nav)  nav.classList.add('active');
+  const tab = document.getElementById('tab-' + n);
+  if (tab) tab.classList.add('active');
 
   if (n === 'history' && typeof renderHistory === 'function') {
     renderHistory();
@@ -50,8 +53,8 @@ function showReportSubTab(name) {
 function setProvider(p, save = true) {
   provider = p;
   if (save) localStorage.setItem('bra_provider', p);
-  document.getElementById('pAnthropic').classList.toggle('active',  p === 'anthropic');
-  document.getElementById('pOpenRouter').classList.toggle('active', p === 'openrouter');
+  document.querySelectorAll('[data-provider-btn]').forEach(b =>
+    b.classList.toggle('active', b.dataset.providerBtn === p));
   updateApiBtn();
 }
 
@@ -69,15 +72,18 @@ function promptKey() {
 }
 
 function updateApiBtn() {
-  const btn  = document.getElementById('apiBtn');
   const name = provider === 'openrouter' ? 'OpenRouter key' : 'Anthropic key';
-  if (apiKey) {
-    document.getElementById('apiIcon').textContent = '●';
-    document.getElementById('apiLbl').textContent  = name + ' set';
-    btn.classList.add('set');
-  } else {
-    document.getElementById('apiIcon').textContent = '○';
-    document.getElementById('apiLbl').textContent  = 'Set ' + name;
-    btn.classList.remove('set');
-  }
+  document.querySelectorAll('[data-api-btn]').forEach(btn => {
+    const icon = btn.querySelector('[data-api-icon]');
+    const lbl  = btn.querySelector('[data-api-lbl]');
+    if (apiKey) {
+      if (icon) icon.textContent = '●';
+      if (lbl)  lbl.textContent  = name + ' set';
+      btn.classList.add('set');
+    } else {
+      if (icon) icon.textContent = '○';
+      if (lbl)  lbl.textContent  = 'Set ' + name;
+      btn.classList.remove('set');
+    }
+  });
 }

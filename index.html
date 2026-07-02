@@ -25,11 +25,11 @@
     <div class="sidebar-bottom">
       <div style="font-size:10px;font-family:'IBM Plex Mono',monospace;color:var(--dim);text-transform:uppercase;letter-spacing:.07em;margin-bottom:6px">Provider</div>
       <div style="display:flex;gap:4px;margin-bottom:8px">
-        <button class="lang-btn active" id="pAnthropic" onclick="setProvider('anthropic')" style="flex:1;border-radius:var(--r-sm)">Anthropic</button>
-        <button class="lang-btn"        id="pOpenRouter" onclick="setProvider('openrouter')" style="flex:1;border-radius:var(--r-sm)">OpenRouter</button>
+        <button class="lang-btn active" id="pAnthropic" data-provider-btn="anthropic" onclick="setProvider('anthropic')" style="flex:1;border-radius:var(--r-sm)">Anthropic</button>
+        <button class="lang-btn"        id="pOpenRouter" data-provider-btn="openrouter" onclick="setProvider('openrouter')" style="flex:1;border-radius:var(--r-sm)">OpenRouter</button>
       </div>
-      <button class="api-btn" id="apiBtn" onclick="promptKey()">
-        <span id="apiIcon">○</span><span id="apiLbl">Set API key</span>
+      <button class="api-btn" id="apiBtn" data-api-btn onclick="promptKey()">
+        <span id="apiIcon" data-api-icon>○</span><span id="apiLbl" data-api-lbl>Set API key</span>
       </button>
     </div>
   </aside>
@@ -156,6 +156,20 @@
     <div class="page" id="page-setup">
       <div class="page-title">Project setup</div>
       <div class="page-sub">Configure once — saved in your browser. Export JSON to share with the team.</div>
+
+      <!-- Mobile-only: provider + API key live in the sidebar on desktop. -->
+      <div class="card mobile-only">
+        <div class="card-head"><span class="card-title">AI provider &amp; key</span></div>
+        <div class="card-body">
+          <div style="display:flex;gap:4px;margin-bottom:8px">
+            <button class="lang-btn active" data-provider-btn="anthropic" onclick="setProvider('anthropic')" style="flex:1;border-radius:var(--r-sm)">Anthropic</button>
+            <button class="lang-btn" data-provider-btn="openrouter" onclick="setProvider('openrouter')" style="flex:1;border-radius:var(--r-sm)">OpenRouter</button>
+          </div>
+          <button class="api-btn" data-api-btn onclick="promptKey()">
+            <span data-api-icon>○</span><span data-api-lbl>Set API key</span>
+          </button>
+        </div>
+      </div>
 
       <div class="card">
         <div class="card-head"><span class="card-title">Project &amp; Jira connection</span></div>
@@ -382,6 +396,15 @@
 
   </main>
 </div>
+
+<!-- Mobile bottom tab bar — hidden on desktop (see css @media 768px). -->
+<nav class="tabbar" id="tabbar">
+  <button class="tab-item active" id="tab-report"   onclick="showPage('report')"><span class="tab-ico">📝</span><span class="tab-lbl">Report</span></button>
+  <button class="tab-item"        id="tab-template" onclick="showPage('template')"><span class="tab-ico">📋</span><span class="tab-lbl">Template</span></button>
+  <button class="tab-item"        id="tab-setup"    onclick="showPage('setup')"><span class="tab-ico">⚙️</span><span class="tab-lbl">Setup</span></button>
+  <button class="tab-item"        id="tab-history"  onclick="showPage('history')"><span class="tab-ico">🕓</span><span class="tab-lbl">History</span></button>
+  <button class="tab-item"        id="tab-context"  onclick="showPage('context')"><span class="tab-ico">🔤</span><span class="tab-lbl">Context</span></button>
+</nav>
 
 <!-- First-time-on-localhost install banner (Windows only). Hidden by default. -->
 <div class="install-banner" id="installBanner" style="display:none" role="dialog" aria-label="Install to Desktop">

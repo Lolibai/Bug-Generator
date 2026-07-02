@@ -194,7 +194,20 @@ textarea::placeholder,input::placeholder{color:var(--dim)}
 .ctx-del{width:28px;height:28px;border-radius:var(--r-sm);border:0.5px solid var(--border);background:none;color:var(--dim);font-size:16px;line-height:1;cursor:pointer;transition:all .15s}
 .ctx-del:hover{border-color:#ff6b6b;color:#ff6b6b}
 
-@media(max-width:580px){.sidebar{display:none}.page{padding:1.2rem}.rg2{grid-template-columns:1fr}.af-grid{grid-template-columns:1fr 1fr}.fb-row{grid-template-columns:1fr 1fr}.fb-type{display:none}.ctx-row{grid-template-columns:1fr 28px}.ctx-row .ctx-aliases{grid-column:1 / 2}}
+/* ── Mobile bottom tab bar (hidden on desktop) ────────────────────────── */
+.tabbar{display:none;position:fixed;left:0;right:0;bottom:0;z-index:900;background:var(--surface);border-top:0.5px solid var(--border);padding:4px 6px calc(4px + env(safe-area-inset-bottom));justify-content:space-around}
+.tab-item{display:flex;flex-direction:column;align-items:center;gap:2px;flex:1;min-height:44px;background:none;border:none;border-radius:var(--r-sm);color:var(--muted);cursor:pointer;padding:4px 2px}
+.tab-item.active{color:var(--accent);background:var(--accent-dim)}
+.tab-ico{font-size:17px;line-height:1.2}
+.tab-lbl{font-size:10px;font-family:'IBM Plex Mono',monospace;letter-spacing:.02em}
+.mobile-only{display:none}
+
+@media(max-width:768px){
+  .sidebar{display:none}
+  .tabbar{display:flex}
+  .mobile-only{display:block}
+  .page{padding:1rem 1rem calc(70px + env(safe-area-inset-bottom))}
+}
 
 /* ── Linked work items ─────────────────────────────────────────────────────
    Rows shared by Setup (project defaults) and result cards (per-report).
