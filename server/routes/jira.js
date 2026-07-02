@@ -3,14 +3,18 @@ import { Router } from 'express';
 // Same allow-list as api/jira.js (Vercel function) — keep them in sync.
 const ALLOWED = /^\/rest\/api\/3\/(issue|myself|project|priority|field|search)/;
 
-export function jiraRouter({ fetchImpl = fetch, env = process.env } = {}) {
+export function jiraRouter({ fetchImpl = fetch, env = process.env, db } = {}) {
   const r = Router();
 
   r.post('/', async (req, res) => {
     const b = req.body || {};
-    const jiraUrl = b.jiraUrl || env.JIRA_BASE_URL;
-    const jiraEmail = b.jiraEmail || env.JIRA_EMAIL;
-    const jiraToken = b.jiraToken || env.JIRA_API_TOKEN;
+    let stored = null;
+    if (db && (!b.jiraUrl || !b.jiraEmail || !b.jiraToken)) {
+      stored = await db.collection('settings').findOne({ _id: 'jira' }).catch(() => null);
+    }
+    const jiraUrl   = b.jiraUrl   || (stored && stored.jiraUrl)   || env.JIRA_BASE_URL;
+    const jiraEmail = b.jiraEmail || (stored && stored.jiraEmail) || env.JIRA_EMAIL;
+    const jiraToken = b.jiraToken || (stored && stored.jiraToken) || env.JIRA_API_TOKEN;
     const { path, method = 'GET', body } = b;
 
     if (!jiraUrl || !jiraEmail || !jiraToken || !path) {

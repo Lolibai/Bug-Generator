@@ -76,3 +76,31 @@ test('upstream network failure is a 502', async () => {
   const res = await request(app).post('/api/jira').send(envelope);
   assert.equal(res.status, 502);
 });
+
+test('proxy falls back to Mongo-stored settings when body has no creds', async () => {
+  await mem.db.collection('settings').updateOne(
+    { _id: 'jira' },
+    { $set: { jiraUrl: 'https://stored.atlassian.net', jiraEmail: 's@x.com', jiraToken: 'stok' } },
+    { upsert: true });
+  const f = fakeFetch();
+  const app = createApp(mem.db, { fetchImpl: f, env: {} });
+  const res = await request(app).post('/api/jira').send({ path: '/rest/api/3/myself' });
+  assert.equal(res.status, 200);
+  assert.equal(f.calls[0].url, 'https://stored.atlassian.net/rest/api/3/myself');
+  const auth = f.calls[0].opts.headers.Authorization;
+  assert.equal(auth, 'Basic ' + Buffer.from('s@x.com:stok').toString('base64'));
+  await mem.db.collection('settings').deleteMany({});
+});
+
+test('request-body creds beat stored settings', async () => {
+  await mem.db.collection('settings').updateOne(
+    { _id: 'jira' },
+    { $set: { jiraUrl: 'https://stored.atlassian.net', jiraEmail: 's@x.com', jiraToken: 'stok' } },
+    { upsert: true });
+  const f = fakeFetch();
+  const app = createApp(mem.db, { fetchImpl: f, env: {} });
+  const res = await request(app).post('/api/jira').send(envelope);
+  assert.equal(res.status, 200);
+  assert.equal(f.calls[0].url, 'https://acme.atlassian.net/rest/api/3/myself');
+  await mem.db.collection('settings').deleteMany({});
+});

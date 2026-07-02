@@ -706,6 +706,7 @@ async function detectBackend() {
     if (j && j.ok) autoBackend = location.origin;
   } catch { /* static hosting — no backend here */ }
   renderLanHint();
+  renderServerJiraStatus();
 }
 
 // "📱 Phone access" link in Setup: LAN IP from the backend + our own port.
@@ -722,6 +723,45 @@ async function renderLanHint() {
     el.innerHTML = `📱 Phone access (LAN): <a href="${url}" style="color:var(--accent)">${url}</a>`;
     el.style.display = 'block';
   } catch { /* backend without /api/info or unreachable — keep hidden */ }
+}
+
+// ── server-stored Jira credentials ────────────────────────────────────────
+// With a backend available, the Jira creds can live on the server (Mongo)
+// so no browser on the LAN needs them locally. Shown only when a backend
+// (explicit or auto-detected) is reachable.
+async function renderServerJiraStatus() {
+  const row = document.getElementById('srvJiraRow');
+  const st  = document.getElementById('srvJiraStatus');
+  const base = effectiveBackendUrl();
+  if (!row || !base) return;
+  try {
+    const j = await (await fetch(base + '/api/settings/jira')).json();
+    row.style.display = 'flex';
+    st.textContent = j.tokenSet
+      ? `server creds set (${j.jiraEmail || 'no email'})`
+      : 'no server creds yet — fill fields above, then store';
+  } catch { /* backend without settings API — keep hidden */ }
+}
+
+async function saveJiraToServer() {
+  const base = effectiveBackendUrl();
+  if (!base) return;
+  try {
+    const res = await fetch(base + '/api/settings/jira', {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        jiraUrl:   document.getElementById('sUrl').value.trim(),
+        jiraEmail: document.getElementById('sEmail').value.trim(),
+        jiraToken: document.getElementById('sToken').value.trim(),  // blank = keep stored
+      }),
+    });
+    if (!res.ok) throw new Error('HTTP ' + res.status);
+    toast('✓ Stored on server');
+    renderServerJiraStatus();
+  } catch (e) {
+    toast('⚠ Store failed: ' + e.message);
+  }
 }
 
 document.addEventListener('DOMContentLoaded', detectBackend);

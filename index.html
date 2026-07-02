@@ -195,6 +195,10 @@
             <button class="btn btn-ghost btn-sm" id="testJiraBtn" onclick="testJiraConnection()">🔌 Test connection</button>
             <span style="font-size:11px;color:var(--dim);font-family:'IBM Plex Mono',monospace">calls /myself via your proxy</span>
           </div>
+          <div id="srvJiraRow" style="display:none;align-items:center;gap:8px;margin-top:8px;flex-wrap:wrap">
+            <button class="btn btn-ghost btn-sm" onclick="saveJiraToServer()">⇪ Store on server</button>
+            <span id="srvJiraStatus" style="font-size:11px;color:var(--dim);font-family:'IBM Plex Mono',monospace"></span>
+          </div>
         </div>
       </div>
 

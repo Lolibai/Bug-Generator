@@ -376,7 +376,11 @@ Express + MongoDB backend that adds:
 - **Analytics** — `GET /api/analytics/summary` aggregates reports by
   project, format and day
 - **Self-hosted Jira proxy** — `POST /api/jira`, same contract as the
-  Vercel proxy, so no Vercel account is needed
+  Vercel proxy, so no Vercel account is needed. Credentials can come from
+  `JIRA_BASE_URL` / `JIRA_EMAIL` / `JIRA_API_TOKEN` in `.env`. Or set them
+  from the UI: fill the Jira fields in **⚙️ Setup** and press **⇪ Store on
+  server** — credentials land in MongoDB and every LAN device can push to
+  Jira with empty local fields.
 
 ### Run it
 

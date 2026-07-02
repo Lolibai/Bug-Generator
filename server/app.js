@@ -6,6 +6,7 @@ import { reportsRouter } from './routes/reports.js';
 import { analyticsRouter } from './routes/analytics.js';
 import { jiraRouter } from './routes/jira.js';
 import { infoRouter } from './routes/info.js';
+import { settingsRouter } from './routes/settings.js';
 
 const ROOT = path.join(path.dirname(fileURLToPath(import.meta.url)), '..');
 
@@ -23,8 +24,9 @@ export function createApp(db, { fetchImpl = fetch, env = process.env } = {}) {
 
   app.use('/api/reports', reportsRouter(db));
   app.use('/api/analytics', analyticsRouter(db, { fetchImpl, env }));
-  app.use('/api/jira', jiraRouter({ fetchImpl, env }));
+  app.use('/api/jira', jiraRouter({ fetchImpl, env, db }));
   app.use('/api/info', infoRouter({ env }));
+  app.use('/api/settings', settingsRouter(db));
 
   app.use('/api', (_req, res) => res.status(404).json({ error: 'Not found' }));
 
