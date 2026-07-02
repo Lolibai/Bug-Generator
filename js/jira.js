@@ -70,19 +70,24 @@ function buildNormalPlainText(r) {
 // but useful for self-hosted Jira with relaxed CORS).
 async function jiraRequest(path, method = 'GET', body = null) {
   const url = (cfg.jiraUrl || '').trim().replace(/\/+$/, '');
-  if (!url || !cfg.jiraEmail || !cfg.jiraToken) {
+  const explicitBackend = (cfg.backendUrl || '').trim().replace(/\/+$/, '');
+  const proxyTarget = explicitBackend ? explicitBackend + '/api/jira'
+    : (cfg.proxyUrl || '').trim() ? cfg.proxyUrl.trim()
+    : autoBackend ? autoBackend + '/api/jira'
+    : '';
+  // Only require browser-side creds when there's no proxy to fall back on:
+  // the Node backend fills missing jiraUrl/email/token from its own .env
+  // (JIRA_BASE_URL / JIRA_EMAIL / JIRA_API_TOKEN). The Vercel proxy doesn't,
+  // but let the server answer with its own clear 400 rather than guessing.
+  const isBackendProxy = proxyTarget && proxyTarget !== (cfg.proxyUrl || '').trim();
+  if ((!url || !cfg.jiraEmail || !cfg.jiraToken) && !isBackendProxy) {
     throw new Error('Fill in Jira connection in Setup first');
   }
 
   // Atlassian Cloud blocks all browser → *.atlassian.net traffic via CORS.
   // Without a proxy the request would fail with a confusing CORS preflight
   // error — surface a friendly message instead.
-  const isCloud = /\.atlassian\.net$/i.test(new URL(url).hostname || '');
-  const explicitBackend = (cfg.backendUrl || '').trim().replace(/\/+$/, '');
-  const proxyTarget = explicitBackend ? explicitBackend + '/api/jira'
-    : (cfg.proxyUrl || '').trim() ? cfg.proxyUrl.trim()
-    : autoBackend ? autoBackend + '/api/jira'
-    : '';
+  const isCloud = url && /\.atlassian\.net$/i.test(new URL(url).hostname || '');
   if (isCloud && !proxyTarget) {
     throw new Error(
       'Jira Cloud blocks direct browser requests (CORS). ' +
