@@ -1,6 +1,9 @@
 import { Router } from 'express';
+import { categorizeSummaries } from '../lib/categorize.js';
 
-export function analyticsRouter(db) {
+const MAX_BATCH = 50;
+
+export function analyticsRouter(db, { fetchImpl = fetch, env = process.env } = {}) {
   const col = db.collection('reports');
   const r = Router();
 
@@ -58,6 +61,35 @@ export function analyticsRouter(db) {
         byDay: facets.byDay.map(({ _id, count }) => ({ day: _id, count })),
       });
     } catch (e) { next(e); }
+  });
+
+  r.post('/categorize', async (req, res, next) => {
+    try {
+      if (!env.OPENROUTER_API_KEY) {
+        return res.status(503).json({ error: 'OPENROUTER_API_KEY is not configured' });
+      }
+      const limit = Math.min(Number(req.query.limit) || MAX_BATCH, MAX_BATCH);
+      const docs = await col.find({ category: { $exists: false } })
+        .sort({ createdAt: 1 }).limit(limit).toArray();
+
+      if (!docs.length) return res.json({ processed: 0, remaining: 0 });
+
+      const cats = await categorizeSummaries(docs.map(d => d.summary || ''), { fetchImpl, env });
+
+      const now = new Date();
+      await col.bulkWrite(docs.map((d, i) => ({
+        updateOne: {
+          filter: { _id: d._id },
+          update: { $set: { category: cats[i], categorizedAt: now } },
+        },
+      })));
+
+      const remaining = await col.countDocuments({ category: { $exists: false } });
+      res.json({ processed: docs.length, remaining });
+    } catch (e) {
+      if (e.status) return res.status(e.status).json({ error: e.message });
+      next(e);
+    }
   });
 
   return r;

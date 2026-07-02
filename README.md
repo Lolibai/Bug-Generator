@@ -396,6 +396,7 @@ both remain configurable).
 | `POST /api/reports` | store a report |
 | `GET /api/reports?projectKey=&from=&to=&limit=&skip=` | list reports |
 | `GET /api/analytics/summary?projectKey=&from=&to=` | totals, by project / format / day, Jira-push count |
+| `POST /api/analytics/categorize?limit=` | AI-categorize stored reports via OpenRouter (needs `OPENROUTER_API_KEY` in `.env`; categories: UI, Functional, Performance, Crash, Data, Security, Integration, Other) |
 | `POST /api/jira` | Jira proxy (same envelope as the Vercel function) |
 
 ### Development

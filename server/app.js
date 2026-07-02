@@ -21,7 +21,7 @@ export function createApp(db, { fetchImpl = fetch, env = process.env } = {}) {
   });
 
   app.use('/api/reports', reportsRouter(db));
-  app.use('/api/analytics', analyticsRouter(db));
+  app.use('/api/analytics', analyticsRouter(db, { fetchImpl, env }));
   app.use('/api/jira', jiraRouter({ fetchImpl, env }));
 
   app.use('/api', (_req, res) => res.status(404).json({ error: 'Not found' }));
