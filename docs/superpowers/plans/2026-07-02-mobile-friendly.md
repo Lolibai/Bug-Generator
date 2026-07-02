@@ -532,6 +532,233 @@ git commit -m "feat: zero-config backend auto-detect and LAN address display"
 
 ---
 
+### Task 7: Server-stored Jira credentials, editable from the UI
+
+**Files:**
+- Create: `server/routes/settings.js`
+- Test: `server/test/settings.test.js`
+- Modify: `server/routes/jira.js` (consult stored settings), `server/app.js` (mount settings, pass db to jiraRouter), `server/test/jira.test.js` (router option change only if needed), `index.html` (server-creds row in the Jira card), `js/config.js` (status + save-to-server), `README.md` (mention UI alternative to .env)
+
+**Interfaces:**
+- Consumes: `createApp(db, { fetchImpl, env })`; Mongo db handle; `autoBackend`/`effectiveBackendUrl()` from js/config.js; Setup fields `#sUrl #sEmail #sToken`; `detectBackend()` flow.
+- Produces: `GET /api/settings/jira` → `{ jiraUrl, jiraEmail, tokenSet }` (token NEVER returned); `PUT /api/settings/jira` body `{ jiraUrl, jiraEmail, jiraToken? }` (blank/absent token keeps the stored one) → same shape as GET; `jiraRouter({ fetchImpl, env, db })` resolves credentials body → stored settings → env.
+
+- [ ] **Step 1: Write the failing tests**
+
+`server/test/settings.test.js`:
+```js
+import { test, before, after, beforeEach } from 'node:test';
+import assert from 'node:assert/strict';
+import request from 'supertest';
+import { createApp } from '../app.js';
+import { startMemoryMongo } from './helpers.js';
+
+let mem, app;
+before(async () => {
+  mem = await startMemoryMongo();
+  app = createApp(mem.db, { env: {} });
+});
+after(() => mem.stop());
+beforeEach(() => mem.db.collection('settings').deleteMany({}));
+
+test('GET returns empty defaults', async () => {
+  const res = await request(app).get('/api/settings/jira');
+  assert.equal(res.status, 200);
+  assert.deepEqual(res.body, { jiraUrl: '', jiraEmail: '', tokenSet: false });
+});
+
+test('PUT stores creds; token never echoed back', async () => {
+  const res = await request(app).put('/api/settings/jira')
+    .send({ jiraUrl: 'https://acme.atlassian.net/', jiraEmail: 'qa@acme.com', jiraToken: 'tok1' });
+  assert.equal(res.status, 200);
+  assert.deepEqual(res.body, { jiraUrl: 'https://acme.atlassian.net', jiraEmail: 'qa@acme.com', tokenSet: true });
+});
+
+test('PUT with blank token keeps the stored token', async () => {
+  await request(app).put('/api/settings/jira')
+    .send({ jiraUrl: 'https://a.example.com', jiraEmail: 'a@a.com', jiraToken: 'keepme' });
+  await request(app).put('/api/settings/jira')
+    .send({ jiraUrl: 'https://b.example.com', jiraEmail: 'b@b.com', jiraToken: '' });
+  const doc = await mem.db.collection('settings').findOne({ _id: 'jira' });
+  assert.equal(doc.jiraToken, 'keepme');
+  assert.equal(doc.jiraUrl, 'https://b.example.com');
+});
+```
+
+Append to `server/test/jira.test.js` (uses the existing `fakeFetch` + `envelope` helpers in that file):
+```js
+test('proxy falls back to Mongo-stored settings when body has no creds', async () => {
+  await mem.db.collection('settings').updateOne(
+    { _id: 'jira' },
+    { $set: { jiraUrl: 'https://stored.atlassian.net', jiraEmail: 's@x.com', jiraToken: 'stok' } },
+    { upsert: true });
+  const f = fakeFetch();
+  const app = createApp(mem.db, { fetchImpl: f, env: {} });
+  const res = await request(app).post('/api/jira').send({ path: '/rest/api/3/myself' });
+  assert.equal(res.status, 200);
+  assert.equal(f.calls[0].url, 'https://stored.atlassian.net/rest/api/3/myself');
+  const auth = f.calls[0].opts.headers.Authorization;
+  assert.equal(auth, 'Basic ' + Buffer.from('s@x.com:stok').toString('base64'));
+  await mem.db.collection('settings').deleteMany({});
+});
+
+test('request-body creds beat stored settings', async () => {
+  await mem.db.collection('settings').updateOne(
+    { _id: 'jira' },
+    { $set: { jiraUrl: 'https://stored.atlassian.net', jiraEmail: 's@x.com', jiraToken: 'stok' } },
+    { upsert: true });
+  const f = fakeFetch();
+  const app = createApp(mem.db, { fetchImpl: f, env: {} });
+  const res = await request(app).post('/api/jira').send(envelope);
+  assert.equal(res.status, 200);
+  assert.equal(f.calls[0].url, 'https://acme.atlassian.net/rest/api/3/myself');
+  await mem.db.collection('settings').deleteMany({});
+});
+```
+
+Run: `cd server && npm test` — new tests FAIL (404 / missing fallback).
+
+- [ ] **Step 2: Implement settings route**
+
+`server/routes/settings.js`:
+```js
+import { Router } from 'express';
+
+// Server-stored Jira credentials (Mongo `settings` collection, _id 'jira').
+// The token is write-only from the API's perspective: GET/PUT responses
+// only ever expose a tokenSet boolean.
+export function settingsRouter(db) {
+  const col = db.collection('settings');
+  const r = Router();
+
+  const publicShape = doc => ({
+    jiraUrl:   (doc && doc.jiraUrl)   || '',
+    jiraEmail: (doc && doc.jiraEmail) || '',
+    tokenSet:  !!(doc && doc.jiraToken),
+  });
+
+  r.get('/jira', async (_req, res, next) => {
+    try { res.json(publicShape(await col.findOne({ _id: 'jira' }))); }
+    catch (e) { next(e); }
+  });
+
+  r.put('/jira', async (req, res, next) => {
+    try {
+      const { jiraUrl = '', jiraEmail = '', jiraToken } = req.body || {};
+      const $set = {
+        jiraUrl:   String(jiraUrl).trim().replace(/\/+$/, ''),
+        jiraEmail: String(jiraEmail).trim(),
+      };
+      if (typeof jiraToken === 'string' && jiraToken.trim()) $set.jiraToken = jiraToken.trim();
+      await col.updateOne({ _id: 'jira' }, { $set }, { upsert: true });
+      res.json(publicShape(await col.findOne({ _id: 'jira' })));
+    } catch (e) { next(e); }
+  });
+
+  return r;
+}
+```
+
+- [ ] **Step 3: Wire the fallback into the Jira proxy**
+
+`server/routes/jira.js` — change the factory signature to `jiraRouter({ fetchImpl = fetch, env = process.env, db } = {})` and replace the credential resolution at the top of the POST handler with:
+```js
+    const b = req.body || {};
+    let stored = null;
+    if (db && (!b.jiraUrl || !b.jiraEmail || !b.jiraToken)) {
+      stored = await db.collection('settings').findOne({ _id: 'jira' }).catch(() => null);
+    }
+    const jiraUrl   = b.jiraUrl   || (stored && stored.jiraUrl)   || env.JIRA_BASE_URL;
+    const jiraEmail = b.jiraEmail || (stored && stored.jiraEmail) || env.JIRA_EMAIL;
+    const jiraToken = b.jiraToken || (stored && stored.jiraToken) || env.JIRA_API_TOKEN;
+```
+(The rest of the handler is unchanged. Wrap the handler body's new `await` correctly — the handler is already `async`.)
+
+`server/app.js`: `import { settingsRouter } from './routes/settings.js';`, mount `app.use('/api/settings', settingsRouter(db));`, and change the jira mount to `app.use('/api/jira', jiraRouter({ fetchImpl, env, db }));`.
+
+Run: `cd server && npm test` — all green (existing jira tests unaffected: they pass creds in the body or use env).
+
+- [ ] **Step 4: UI — store/status in the Jira card**
+
+`index.html`, inside the Jira connection card, replace the Test-connection row:
+```html
+          <div style="display:flex;align-items:center;gap:8px;margin-top:4px;flex-wrap:wrap">
+            <button class="btn btn-ghost btn-sm" id="testJiraBtn" onclick="testJiraConnection()">🔌 Test connection</button>
+            <span style="font-size:11px;color:var(--dim);font-family:'IBM Plex Mono',monospace">calls /myself via your proxy</span>
+          </div>
+```
+with:
+```html
+          <div style="display:flex;align-items:center;gap:8px;margin-top:4px;flex-wrap:wrap">
+            <button class="btn btn-ghost btn-sm" id="testJiraBtn" onclick="testJiraConnection()">🔌 Test connection</button>
+            <span style="font-size:11px;color:var(--dim);font-family:'IBM Plex Mono',monospace">calls /myself via your proxy</span>
+          </div>
+          <div id="srvJiraRow" style="display:none;align-items:center;gap:8px;margin-top:8px;flex-wrap:wrap">
+            <button class="btn btn-ghost btn-sm" onclick="saveJiraToServer()">⇪ Store on server</button>
+            <span id="srvJiraStatus" style="font-size:11px;color:var(--dim);font-family:'IBM Plex Mono',monospace"></span>
+          </div>
+```
+
+`js/config.js`, append:
+```js
+// ── server-stored Jira credentials ────────────────────────────────────────
+// With a backend available, the Jira creds can live on the server (Mongo)
+// so no browser on the LAN needs them locally. Shown only when a backend
+// (explicit or auto-detected) is reachable.
+async function renderServerJiraStatus() {
+  const row = document.getElementById('srvJiraRow');
+  const st  = document.getElementById('srvJiraStatus');
+  const base = effectiveBackendUrl();
+  if (!row || !base) return;
+  try {
+    const j = await (await fetch(base + '/api/settings/jira')).json();
+    row.style.display = 'flex';
+    st.textContent = j.tokenSet
+      ? `server creds set (${j.jiraEmail || 'no email'})`
+      : 'no server creds yet — fill fields above, then store';
+  } catch { /* backend without settings API — keep hidden */ }
+}
+
+async function saveJiraToServer() {
+  const base = effectiveBackendUrl();
+  if (!base) return;
+  try {
+    const res = await fetch(base + '/api/settings/jira', {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        jiraUrl:   document.getElementById('sUrl').value.trim(),
+        jiraEmail: document.getElementById('sEmail').value.trim(),
+        jiraToken: document.getElementById('sToken').value.trim(),  // blank = keep stored
+      }),
+    });
+    if (!res.ok) throw new Error('HTTP ' + res.status);
+    toast('✓ Stored on server');
+    renderServerJiraStatus();
+  } catch (e) {
+    toast('⚠ Store failed: ' + e.message);
+  }
+}
+```
+And in `detectBackend()`, after `renderLanHint();` add `renderServerJiraStatus();`.
+
+- [ ] **Step 5: README**
+
+In the self-hosted backend section, after the Jira env-var mention: "Or set them from the UI: fill the Jira fields in **⚙️ Setup** and press **⇪ Store on server** — credentials land in MongoDB and every LAN device can push to Jira with empty local fields."
+
+- [ ] **Step 6: Verify**
+
+`cd server && npm test` green; parse-check js/config.js. Manual: docker stack up → Setup shows the "Store on server" row; storing creds then clearing local fields still lets Test connection succeed.
+
+- [ ] **Step 7: Commit**
+
+```bash
+git add server/routes/settings.js server/test/settings.test.js server/routes/jira.js server/test/jira.test.js server/app.js index.html js/config.js README.md
+git commit -m "feat(server): server-stored Jira credentials editable from Setup UI"
+```
+
+---
+
 ## Final verification (after all tasks)
 
 1. `docker compose up -d --build`; open `http://localhost:3000`.
