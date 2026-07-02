@@ -1,0 +1,32 @@
+services:
+  app:
+    build:
+      context: .
+      dockerfile: server/Dockerfile
+    ports:
+      - "${PORT:-3000}:3000"
+    environment:
+      MONGODB_URI: mongodb://mongo:27017/bugreports
+      JIRA_BASE_URL: ${JIRA_BASE_URL:-}
+      JIRA_EMAIL: ${JIRA_EMAIL:-}
+      JIRA_API_TOKEN: ${JIRA_API_TOKEN:-}
+      OPENROUTER_API_KEY: ${OPENROUTER_API_KEY:-}
+      OPENROUTER_MODEL: ${OPENROUTER_MODEL:-anthropic/claude-3.5-haiku}
+    depends_on:
+      mongo:
+        condition: service_healthy
+    restart: unless-stopped
+
+  mongo:
+    image: mongo:7
+    volumes:
+      - mongo-data:/data/db
+    healthcheck:
+      test: ["CMD", "mongosh", "--quiet", "--eval", "db.adminCommand('ping')"]
+      interval: 5s
+      timeout: 5s
+      retries: 12
+    restart: unless-stopped
+
+volumes:
+  mongo-data:
