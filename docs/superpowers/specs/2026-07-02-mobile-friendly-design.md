@@ -65,6 +65,27 @@ pixel-identical to today.
 - Voice input works in Chrome for Android; iOS Safari support is limited —
   typing always works. One-line README note.
 
+### 5. LAN access (stacked on the backend branch)
+
+This work builds on `feature/express-mongo-backend` so phones use the
+docker stack over LAN:
+
+- `docker compose up -d` already publishes the app on `0.0.0.0:${PORT:-3000}`
+  — reachable at `http://<host-ip>:3000` from any LAN device. No compose
+  change needed.
+- README gains a "Use it from your phone (LAN)" subsection: find the host IP
+  (`ip addr` / `ipconfig`), open `http://<host-ip>:3000`, set Backend URL to
+  the same origin.
+- Frontend nicety: when the app is served by the backend (not `file://` or
+  Vercel), the Setup "Backend URL" field's placeholder suggests
+  `window.location.origin` so phone users can just copy it in.
+- **Secure-context caveat (documented):** Chrome blocks the Web Speech API
+  (mic) on plain-HTTP non-localhost origins. On a phone over LAN, dictation
+  is unavailable unless the user enables
+  `chrome://flags/#unsafely-treat-insecure-origin-as-secure` for the host
+  origin (README documents this). Typing, generation, history, analytics and
+  Jira push all work regardless. HTTPS termination is out of scope.
+
 ## Error handling
 
 Pure presentational change — no new failure modes. The tab bar reuses
