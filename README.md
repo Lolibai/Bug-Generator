@@ -363,6 +363,50 @@ You'll get a URL like `https://bug-report-agent.vercel.app`. Then:
 Alternative: drag-and-drop the project folder to https://vercel.com/new.
 The `vercel.json` + `api/jira.js` are detected automatically.
 
+## Self-hosted backend (Docker + MongoDB) — optional
+
+Everything above works with zero install. Optionally, you can run a small
+Express + MongoDB backend that adds:
+
+- **Central report storage** — every generated report is also saved to
+  MongoDB (shared across the team, not capped at 20 like local history)
+- **Analytics** — `GET /api/analytics/summary` aggregates reports by
+  project, format and day
+- **Self-hosted Jira proxy** — `POST /api/jira`, same contract as the
+  Vercel proxy, so no Vercel account is needed
+
+### Run it
+
+```bash
+cp .env.example .env        # adjust if needed
+docker compose up -d --build
+```
+
+Open `http://localhost:3000` — the backend serves the app itself — then in
+**⚙️ Setup** set **Backend URL** to `http://localhost:3000` and save.
+From now on every generated report is also stored centrally, and Jira
+pushes go through the backend (Backend URL takes precedence over Proxy URL;
+both remain configurable).
+
+### API
+
+| Endpoint | Purpose |
+|---|---|
+| `GET /health` | liveness + Mongo connectivity |
+| `POST /api/reports` | store a report |
+| `GET /api/reports?projectKey=&from=&to=&limit=&skip=` | list reports |
+| `GET /api/analytics/summary?projectKey=&from=&to=` | totals, by project / format / day, Jira-push count |
+| `POST /api/jira` | Jira proxy (same envelope as the Vercel function) |
+
+### Development
+
+```bash
+cd server
+npm install
+npm test        # node --test with in-memory MongoDB
+npm start       # needs MONGODB_URI (see .env.example)
+```
+
 ### Jira field gotchas
 
 The proxy translates the AI-extracted custom fields into the shapes Jira
