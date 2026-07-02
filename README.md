@@ -388,6 +388,31 @@ From now on every generated report is also stored centrally, and Jira
 pushes go through the backend (Backend URL takes precedence over Proxy URL;
 both remain configurable).
 
+### Use it from your phone (LAN)
+
+The docker stack listens on all interfaces, so any device on your network
+can use the app:
+
+1. Find your computer's LAN IP — `ip addr` (Linux), `ipconfig` (Windows),
+   or System Settings → Network (macOS). Say it's `192.168.1.42`.
+2. On the phone, open `http://192.168.1.42:3000` in Chrome.
+3. In **⚙️ Setup**, set **Backend URL** to that same address (the field's
+   placeholder suggests it) and save.
+
+The UI is fully mobile-friendly — navigation moves to a bottom tab bar.
+
+**Voice input caveats on phones:**
+
+- Chrome treats plain-HTTP LAN addresses as insecure and blocks the
+  microphone there. To dictate on the phone anyway, open
+  `chrome://flags/#unsafely-treat-insecure-origin-as-secure`, add
+  `http://192.168.1.42:3000`, and relaunch Chrome. Everything except the
+  mic (typing, generating, history, Jira push) works without this.
+- Voice input works in Chrome for Android; iOS Safari support is limited —
+  typing always works.
+- The floating dictation window (Batch) is desktop-Chrome-only; on phones
+  the normal inline mic controls are used.
+
 ### API
 
 | Endpoint | Purpose |
