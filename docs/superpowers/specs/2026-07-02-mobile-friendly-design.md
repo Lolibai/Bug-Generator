@@ -86,6 +86,20 @@ docker stack over LAN:
   origin (README documents this). Typing, generation, history, analytics and
   Jira push all work regardless. HTTPS termination is out of scope.
 
+### 6. Microphone permission on page load (addendum)
+
+On first visit, the app proactively requests microphone permission instead
+of waiting for the first mic tap:
+
+- On `DOMContentLoaded`, if the context is secure (`window.isSecureContext`)
+  and `navigator.permissions.query({name:'microphone'})` reports `prompt`,
+  call `getUserMedia({audio:true})` once and immediately stop the tracks.
+- Never re-prompts when state is `granted` or `denied`; browsers that lack
+  the Permissions API fall back to prompting once per session guarded by a
+  `sessionStorage` flag.
+- All failures are silent (console-only) — the existing per-tap mic flow is
+  unchanged and remains the fallback.
+
 ## Error handling
 
 Pure presentational change — no new failure modes. The tab bar reuses
