@@ -687,3 +687,41 @@ function updateProjSub() {
     ? `Project: ${cfg.projectName} (${cfg.projectKey}) · Describe the bug — voice or text.`
     : 'Describe the bug — voice or text — get a Jira-ready report.';
 }
+
+// ── zero-config backend detection ─────────────────────────────────────────
+// When the page is served by our own Express backend (docker stack), adopt
+// it automatically: reports sync and Jira pushes work with no Setup at all.
+// Explicit cfg.backendUrl always wins over the auto-detected origin.
+let autoBackend = '';
+
+function effectiveBackendUrl() {
+  return (cfg.backendUrl || autoBackend || '').trim().replace(/\/+$/, '');
+}
+
+async function detectBackend() {
+  if (!/^https?:$/.test(location.protocol)) return;   // file:// → nothing to probe
+  try {
+    const r = await fetch('/health');
+    const j = await r.json();
+    if (j && j.ok) autoBackend = location.origin;
+  } catch { /* static hosting — no backend here */ }
+  renderLanHint();
+}
+
+// "📱 Phone access" link in Setup: LAN IP from the backend + our own port.
+async function renderLanHint() {
+  const el = document.getElementById('lanHint');
+  const base = effectiveBackendUrl();
+  if (!el || !base) return;
+  try {
+    const j = await (await fetch(base + '/api/info')).json();
+    const ip = (j.lanIps || [])[0];
+    if (!ip) return;
+    const port = location.port ? ':' + location.port : '';
+    const url = `http://${ip}${port}`;
+    el.innerHTML = `📱 Phone access (LAN): <a href="${url}" style="color:var(--accent)">${url}</a>`;
+    el.style.display = 'block';
+  } catch { /* backend without /api/info or unreachable — keep hidden */ }
+}
+
+document.addEventListener('DOMContentLoaded', detectBackend);

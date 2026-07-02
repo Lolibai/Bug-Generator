@@ -12,6 +12,7 @@ services:
       JIRA_API_TOKEN: ${JIRA_API_TOKEN:-}
       OPENROUTER_API_KEY: ${OPENROUTER_API_KEY:-}
       OPENROUTER_MODEL: ${OPENROUTER_MODEL:-anthropic/claude-3.5-haiku}
+      HOST_IP: ${HOST_IP:-}
     depends_on:
       mongo:
         condition: service_healthy

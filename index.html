@@ -190,6 +190,7 @@
             <input type="url" id="sProxy" placeholder="https://your-app.vercel.app/api/jira"/></div>
           <div class="field"><label class="lbl">Backend URL <span style="color:var(--dim)">(optional — self-hosted server: central history + analytics + Jira proxy)</span></label>
             <input type="url" id="sBackend" placeholder="http://localhost:3000"/></div>
+          <div id="lanHint" style="display:none;font-size:12px;font-family:'IBM Plex Mono',monospace;color:var(--muted);margin:-6px 0 12px"></div>
           <div style="display:flex;align-items:center;gap:8px;margin-top:4px">
             <button class="btn btn-ghost btn-sm" id="testJiraBtn" onclick="testJiraConnection()">🔌 Test connection</button>
             <span style="font-size:11px;color:var(--dim);font-family:'IBM Plex Mono',monospace">calls /myself via your proxy</span>

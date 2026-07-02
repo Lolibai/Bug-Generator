@@ -345,6 +345,9 @@ Atlassian Cloud (`*.atlassian.net`) blocks direct browser → Jira requests
 because of CORS. The repo ships with a tiny serverless proxy that solves
 this. Deploy steps:
 
+**Running the docker backend? Skip this section** — the backend serves the
+same proxy at `/api/jira` and the app uses it automatically.
+
 ```bash
 npm i -g vercel
 cd /path/to/bug-report-agent
@@ -398,6 +401,9 @@ can use the app:
 2. On the phone, open `http://192.168.1.42:3000` in Chrome.
 3. In **⚙️ Setup**, set **Backend URL** to that same address (the field's
    placeholder suggests it) and save.
+
+Setting `HOST_IP` in `.env` enables the in-app "📱 Phone access (LAN)" link
+in Setup, so you don't have to look up the address yourself.
 
 The UI is fully mobile-friendly — navigation moves to a bottom tab bar.
 

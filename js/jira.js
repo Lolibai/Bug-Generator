@@ -78,8 +78,11 @@ async function jiraRequest(path, method = 'GET', body = null) {
   // Without a proxy the request would fail with a confusing CORS preflight
   // error — surface a friendly message instead.
   const isCloud = /\.atlassian\.net$/i.test(new URL(url).hostname || '');
-  const backendJira = cfg.backendUrl ? cfg.backendUrl.trim().replace(/\/+$/, '') + '/api/jira' : '';
-  const proxyTarget = backendJira || (cfg.proxyUrl || '').trim();
+  const explicitBackend = (cfg.backendUrl || '').trim().replace(/\/+$/, '');
+  const proxyTarget = explicitBackend ? explicitBackend + '/api/jira'
+    : (cfg.proxyUrl || '').trim() ? cfg.proxyUrl.trim()
+    : autoBackend ? autoBackend + '/api/jira'
+    : '';
   if (isCloud && !proxyTarget) {
     throw new Error(
       'Jira Cloud blocks direct browser requests (CORS). ' +

@@ -61,7 +61,7 @@ function addToHistory(report, format = reportFormat, ticketKey = null) {
 // Fire-and-forget copy to the self-hosted backend (Setup → Backend URL).
 // Never blocks or breaks the local flow — failures are console-only.
 function syncReportToBackend(item) {
-  const base = (cfg.backendUrl || '').trim().replace(/\/+$/, '');
+  const base = effectiveBackendUrl();
   if (!base) return;
   fetch(base + '/api/reports', {
     method:  'POST',
