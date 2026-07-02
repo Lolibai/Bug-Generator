@@ -100,6 +100,25 @@ of waiting for the first mic tap:
 - All failures are silent (console-only) — the existing per-tap mic flow is
   unchanged and remains the fallback.
 
+### 7. Zero-config backend + LAN address display (addendum)
+
+When the app is served by the Express backend, the Vercel proxy and manual
+Backend URL become unnecessary:
+
+- On load, if no Backend URL is configured and the page was served over
+  http(s), the frontend probes same-origin `/health`; on `{ok:true}` it
+  adopts `location.origin` as an implicit backend for BOTH report sync and
+  Jira pushes. Explicit settings win. Priority: explicit Backend URL →
+  explicit Proxy URL → auto-detected same-origin backend → direct.
+- `file://` and static hosting keep today's behavior (probe fails silently).
+- New `GET /api/info` returns `{ ok, lanIps }` — `HOST_IP` env when set
+  (docker can't see the host's LAN IP), else non-internal IPv4 interfaces.
+- Setup shows a "📱 Phone access (LAN)" link under Backend URL —
+  `http://<lanIp>:<current port>` — when a backend (explicit or auto) is
+  reachable and reports an IP. Hidden otherwise.
+- compose/.env.example gain optional `HOST_IP`; README notes Vercel proxy
+  is only needed without the docker backend.
+
 ## Error handling
 
 Pure presentational change — no new failure modes. The tab bar reuses

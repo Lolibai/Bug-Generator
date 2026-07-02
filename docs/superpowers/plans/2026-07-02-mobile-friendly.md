@@ -366,6 +366,172 @@ git commit -m "feat(mobile): request microphone permission on page load"
 
 ---
 
+### Task 6: Zero-config backend auto-detect + LAN address display
+
+**Files:**
+- Create: `server/routes/info.js`
+- Test: `server/test/info.test.js`
+- Modify: `server/app.js` (mount `/api/info`), `docker-compose.yml` + `.env.example` (optional `HOST_IP`), `js/config.js` (auto-detect + LAN hint), `js/history.js` (sync uses effective backend), `js/jira.js` (proxy priority), `index.html` (`#lanHint` div under the Backend URL field), `README.md` (Vercel-optional note)
+
+**Interfaces:**
+- Consumes: `createApp(db, { fetchImpl, env })`; existing `syncReportToBackend` in js/history.js; `proxyTarget` logic in js/jira.js `jiraRequest()`; `#sBackend` field in Setup.
+- Produces: `GET /api/info` → `{ ok: true, lanIps: string[] }`; frontend globals `autoBackend` (string) and `effectiveBackendUrl()` (returns explicit `cfg.backendUrl` or `autoBackend`, trailing slashes stripped) defined in js/config.js.
+
+- [ ] **Step 1: Write the failing server test**
+
+`server/test/info.test.js`:
+```js
+import { test, before, after } from 'node:test';
+import assert from 'node:assert/strict';
+import request from 'supertest';
+import { createApp } from '../app.js';
+import { startMemoryMongo } from './helpers.js';
+
+let mem;
+before(async () => { mem = await startMemoryMongo(); });
+after(() => mem.stop());
+
+test('HOST_IP env takes precedence', async () => {
+  const app = createApp(mem.db, { env: { HOST_IP: '10.0.0.9' } });
+  const res = await request(app).get('/api/info');
+  assert.equal(res.status, 200);
+  assert.deepEqual(res.body, { ok: true, lanIps: ['10.0.0.9'] });
+});
+
+test('falls back to interface scan (array of strings)', async () => {
+  const app = createApp(mem.db, { env: {} });
+  const res = await request(app).get('/api/info');
+  assert.equal(res.status, 200);
+  assert.equal(res.body.ok, true);
+  assert.ok(Array.isArray(res.body.lanIps));
+  res.body.lanIps.forEach(ip => assert.match(ip, /^\d+\.\d+\.\d+\.\d+$/));
+});
+```
+
+Run: `cd server && node --test test/info.test.js` — expect FAIL (404).
+
+- [ ] **Step 2: Implement the route**
+
+`server/routes/info.js`:
+```js
+import os from 'node:os';
+import { Router } from 'express';
+
+// LAN discovery: inside docker the container can't see the host's LAN IP,
+// so HOST_IP (set in .env) wins; the interface scan covers bare `npm start`.
+export function infoRouter({ env = process.env } = {}) {
+  const r = Router();
+  r.get('/', (_req, res) => {
+    let lanIps = [];
+    if (env.HOST_IP) {
+      lanIps = [env.HOST_IP];
+    } else {
+      for (const ifaces of Object.values(os.networkInterfaces())) {
+        for (const i of ifaces || []) {
+          if (i.family === 'IPv4' && !i.internal) lanIps.push(i.address);
+        }
+      }
+    }
+    res.json({ ok: true, lanIps });
+  });
+  return r;
+}
+```
+
+In `server/app.js`: `import { infoRouter } from './routes/info.js';` and mount `app.use('/api/info', infoRouter({ env }));` next to the other /api mounts.
+
+Run: `cd server && npm test` — all green.
+
+- [ ] **Step 3: Compose + env plumbing**
+
+`docker-compose.yml` app environment: add `HOST_IP: ${HOST_IP:-}`.
+`.env.example`, after the OPENROUTER lines:
+```bash
+# Your machine's LAN IP — shown in the app as the phone-access address.
+# Find it with: hostname -I | awk '{print $1}'   (docker cannot autodetect it)
+HOST_IP=
+```
+
+- [ ] **Step 4: Frontend auto-detect + LAN hint**
+
+`index.html`: directly under the Backend URL field div, add:
+```html
+          <div id="lanHint" style="display:none;font-size:12px;font-family:'IBM Plex Mono',monospace;color:var(--muted);margin:-6px 0 12px"></div>
+```
+
+`js/config.js`, append at the end of the file:
+```js
+// ── zero-config backend detection ─────────────────────────────────────────
+// When the page is served by our own Express backend (docker stack), adopt
+// it automatically: reports sync and Jira pushes work with no Setup at all.
+// Explicit cfg.backendUrl always wins over the auto-detected origin.
+let autoBackend = '';
+
+function effectiveBackendUrl() {
+  return (cfg.backendUrl || autoBackend || '').trim().replace(/\/+$/, '');
+}
+
+async function detectBackend() {
+  if (!/^https?:$/.test(location.protocol)) return;   // file:// → nothing to probe
+  try {
+    const r = await fetch('/health');
+    const j = await r.json();
+    if (j && j.ok) autoBackend = location.origin;
+  } catch { /* static hosting — no backend here */ }
+  renderLanHint();
+}
+
+// "📱 Phone access" link in Setup: LAN IP from the backend + our own port.
+async function renderLanHint() {
+  const el = document.getElementById('lanHint');
+  const base = effectiveBackendUrl();
+  if (!el || !base) return;
+  try {
+    const j = await (await fetch(base + '/api/info')).json();
+    const ip = (j.lanIps || [])[0];
+    if (!ip) return;
+    const port = location.port ? ':' + location.port : '';
+    const url = `http://${ip}${port}`;
+    el.innerHTML = `📱 Phone access (LAN): <a href="${url}" style="color:var(--accent)">${url}</a>`;
+    el.style.display = 'block';
+  } catch { /* backend without /api/info or unreachable — keep hidden */ }
+}
+
+document.addEventListener('DOMContentLoaded', detectBackend);
+```
+
+`js/history.js` — in `syncReportToBackend`, replace
+`const base = (cfg.backendUrl || '').trim().replace(/\/+$/, '');`
+with
+`const base = effectiveBackendUrl();`
+
+`js/jira.js` — in `jiraRequest()`, replace the `backendJira`/`proxyTarget` lines with (priority: explicit backend → explicit proxy → auto backend):
+```js
+  const explicitBackend = (cfg.backendUrl || '').trim().replace(/\/+$/, '');
+  const proxyTarget = explicitBackend ? explicitBackend + '/api/jira'
+    : (cfg.proxyUrl || '').trim() ? cfg.proxyUrl.trim()
+    : autoBackend ? autoBackend + '/api/jira'
+    : '';
+```
+
+- [ ] **Step 5: README note**
+
+In the Vercel deploy/proxy section add one line: "**Running the docker backend? Skip this section** — the backend serves the same proxy at `/api/jira` and the app uses it automatically." And in the self-hosted backend section mention `HOST_IP` in `.env` enables the in-app "📱 Phone access (LAN)" link.
+
+- [ ] **Step 6: Verify**
+
+`cd server && npm test` green; `node -e "new Function(require('fs').readFileSync('js/config.js','utf8'))"` and same for js/history.js, js/jira.js — parse.
+Manual: docker stack (no Backend URL configured, no Vercel proxy) → generate report lands in Mongo; Setup shows the LAN link when HOST_IP is set; `file://` open → no probe errors in console.
+
+- [ ] **Step 7: Commit**
+
+```bash
+git add server/routes/info.js server/test/info.test.js server/app.js docker-compose.yml .env.example index.html js/config.js js/history.js js/jira.js README.md
+git commit -m "feat: zero-config backend auto-detect and LAN address display"
+```
+
+---
+
 ## Final verification (after all tasks)
 
 1. `docker compose up -d --build`; open `http://localhost:3000`.
