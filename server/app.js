@@ -9,7 +9,7 @@ import { jiraRouter } from './routes/jira.js';
 const ROOT = path.join(path.dirname(fileURLToPath(import.meta.url)), '..');
 
 // Factory so tests can inject an in-memory db and a fake fetch.
-export function createApp(db, { fetchImpl = fetch } = {}) {
+export function createApp(db, { fetchImpl = fetch, env = process.env } = {}) {
   const app = express();
   app.use(cors());
   app.use(express.json({ limit: '2mb' }));
@@ -22,7 +22,7 @@ export function createApp(db, { fetchImpl = fetch } = {}) {
 
   app.use('/api/reports', reportsRouter(db));
   app.use('/api/analytics', analyticsRouter(db));
-  app.use('/api/jira', jiraRouter({ fetchImpl }));
+  app.use('/api/jira', jiraRouter({ fetchImpl, env }));
 
   app.use('/api', (_req, res) => res.status(404).json({ error: 'Not found' }));
 
