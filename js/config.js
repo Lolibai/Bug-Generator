@@ -7,6 +7,7 @@ function renderSetup() {
   document.getElementById('sEmail').value = cfg.jiraEmail   || '';
   document.getElementById('sToken').value = cfg.jiraToken   || '';
   document.getElementById('sProxy').value = cfg.proxyUrl    || '';
+  document.getElementById('sBackend').value = cfg.backendUrl || '';
   const envEl = document.getElementById('sDefEnv');
   if (envEl) envEl.value = cfg.defaultEnvironment || '';
   renderRules();
@@ -620,6 +621,7 @@ function saveCfg() {
   cfg.jiraEmail   = document.getElementById('sEmail').value.trim();
   cfg.jiraToken   = document.getElementById('sToken').value.trim();
   cfg.proxyUrl    = document.getElementById('sProxy').value.trim();
+  cfg.backendUrl  = document.getElementById('sBackend').value.trim().replace(/\/+$/, '');
   const envEl = document.getElementById('sDefEnv');
   // Trim only trailing whitespace — internal newlines/indents are part of
   // the verbatim block (e.g. multi-device "Display: 6.1\nApp_version: …").

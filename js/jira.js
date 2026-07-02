@@ -78,18 +78,20 @@ async function jiraRequest(path, method = 'GET', body = null) {
   // Without a proxy the request would fail with a confusing CORS preflight
   // error — surface a friendly message instead.
   const isCloud = /\.atlassian\.net$/i.test(new URL(url).hostname || '');
-  if (isCloud && !cfg.proxyUrl) {
+  const backendJira = cfg.backendUrl ? cfg.backendUrl.trim().replace(/\/+$/, '') + '/api/jira' : '';
+  const proxyTarget = backendJira || (cfg.proxyUrl || '').trim();
+  if (isCloud && !proxyTarget) {
     throw new Error(
       'Jira Cloud blocks direct browser requests (CORS). ' +
-      'Set "Proxy URL" in Setup to your Vercel proxy ' +
-      '(https://<your-app>.vercel.app/api/jira). See README → "Deploy to Vercel".'
+      'Set "Backend URL" (self-hosted server) or "Proxy URL" (Vercel) in Setup. ' +
+      'See README.'
     );
   }
 
   let res, data;
 
-  if (cfg.proxyUrl) {
-    res = await fetch(cfg.proxyUrl.trim(), {
+  if (proxyTarget) {
+    res = await fetch(proxyTarget, {
       method:  'POST',
       headers: { 'Content-Type': 'application/json', 'Accept': 'application/json' },
       body:    JSON.stringify({

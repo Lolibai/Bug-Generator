@@ -44,7 +44,7 @@ function saveHistory(list) {
 function addToHistory(report, format = reportFormat, ticketKey = null) {
   if (!report || !report.summary) return;
   const h = loadHistory();
-  h.unshift({
+  const item = {
     id:        Date.now(),
     date:      new Date().toLocaleString(),
     summary:   report.summary,
@@ -52,8 +52,29 @@ function addToHistory(report, format = reportFormat, ticketKey = null) {
     format:    format || 'normal',
     ticketKey: null,
     report:    report,
-  });
+  };
+  h.unshift(item);
   saveHistory(h);
+  syncReportToBackend(item);
+}
+
+// Fire-and-forget copy to the self-hosted backend (Setup → Backend URL).
+// Never blocks or breaks the local flow — failures are console-only.
+function syncReportToBackend(item) {
+  const base = (cfg.backendUrl || '').trim().replace(/\/+$/, '');
+  if (!base) return;
+  fetch(base + '/api/reports', {
+    method:  'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      summary:    item.summary,
+      severity:   item.severity,
+      format:     item.format,
+      projectKey: cfg.projectKey || null,
+      ticketKey:  item.ticketKey,
+      report:     item.report,
+    }),
+  }).catch(e => console.warn('Backend sync failed:', e));
 }
 
 // ── render ────────────────────────────────────────────────────────────────
