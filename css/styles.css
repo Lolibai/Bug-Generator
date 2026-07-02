@@ -207,6 +207,25 @@ textarea::placeholder,input::placeholder{color:var(--dim)}
   .tabbar{display:flex}
   .mobile-only{display:block}
   .page{padding:1rem 1rem calc(70px + env(safe-area-inset-bottom))}
+  /* layout collapse */
+  .g2,.g3,.rg2{grid-template-columns:1fr}
+  .af-grid{grid-template-columns:1fr 1fr}
+  .lwi-row{grid-template-columns:1fr 1fr;grid-auto-rows:auto}
+  .lwi-row input[placeholder]{grid-column:1 / -1}
+  .fb-row{grid-template-columns:1fr 1fr}
+  .fb-type{display:none}
+  .ctx-row{grid-template-columns:1fr 28px}
+  .ctx-row .ctx-aliases{grid-column:1 / 2}
+  /* dense custom-fields table scrolls horizontally instead of crushing */
+  .fields-list{overflow-x:auto}
+  .field-row{min-width:560px}
+  /* touch ergonomics */
+  .btn{min-height:44px}
+  .btn-sm{min-height:38px}
+  .tab-item,.sub-tab{min-height:44px}
+  input[type="text"],input[type="password"],input[type="url"],select,textarea{font-size:16px;min-height:44px}
+  .voice-area{flex-wrap:wrap}
+  .toast,.install-banner{bottom:calc(80px + env(safe-area-inset-bottom))}
 }
 
 /* ── Linked work items ─────────────────────────────────────────────────────
