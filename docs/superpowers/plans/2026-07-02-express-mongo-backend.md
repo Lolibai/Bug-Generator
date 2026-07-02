@@ -449,7 +449,7 @@ git commit -m "feat(server): reports CRUD with filtering and pagination"
 
 **Interfaces:**
 - Consumes: `reports` collection documents from Task 2 (`projectKey`, `format`, `ticketKey`, `createdAt: Date`).
-- Produces: `GET /api/analytics/summary?projectKey=&from=&to=` → `{ total, pushedToJira, byProject: [{key, count}], byFormat: [{key, count}], byDay: [{day: "YYYY-MM-DD", count}] }` (byDay ascending, byProject/byFormat descending by count).
+- Produces: `GET /api/analytics/summary?projectKey=&from=&to=` → `{ total, pushedToJira, byProject: [{key, count}], byFormat: [{key, count}], byCategory: [{key, count}], byDay: [{day: "YYYY-MM-DD", count}] }` (byDay ascending, others descending by count; reports without a `category` field appear under key `(uncategorized)`).
 
 - [ ] **Step 1: Write the failing tests**
 
@@ -471,7 +471,7 @@ beforeEach(() => mem.db.collection('reports').deleteMany({}));
 
 async function seed() {
   await mem.db.collection('reports').insertMany([
-    { summary: 'a', projectKey: 'QA',  format: 'normal',  ticketKey: 'QA-1', createdAt: new Date('2026-07-01T10:00:00Z') },
+    { summary: 'a', projectKey: 'QA',  format: 'normal',  ticketKey: 'QA-1', category: 'UI', createdAt: new Date('2026-07-01T10:00:00Z') },
     { summary: 'b', projectKey: 'QA',  format: 'gherkin', ticketKey: null,   createdAt: new Date('2026-07-01T11:00:00Z') },
     { summary: 'c', projectKey: 'OPS', format: 'normal',  ticketKey: null,   createdAt: new Date('2026-07-02T09:00:00Z') },
   ]);
@@ -485,6 +485,8 @@ test('summary aggregates totals, jira pushes, and breakdowns', async () => {
   assert.equal(res.body.pushedToJira, 1);
   assert.deepEqual(res.body.byProject[0], { key: 'QA', count: 2 });
   assert.deepEqual(res.body.byFormat.find(f => f.key === 'normal'), { key: 'normal', count: 2 });
+  assert.deepEqual(res.body.byCategory.find(c => c.key === 'UI'), { key: 'UI', count: 1 });
+  assert.deepEqual(res.body.byCategory.find(c => c.key === '(uncategorized)'), { key: '(uncategorized)', count: 2 });
   assert.deepEqual(res.body.byDay, [
     { day: '2026-07-01', count: 2 },
     { day: '2026-07-02', count: 1 },
@@ -503,7 +505,7 @@ test('summary respects projectKey and date filters', async () => {
 
 test('summary on empty collection returns zeros', async () => {
   const res = await request(app).get('/api/analytics/summary');
-  assert.deepEqual(res.body, { total: 0, pushedToJira: 0, byProject: [], byFormat: [], byDay: [] });
+  assert.deepEqual(res.body, { total: 0, pushedToJira: 0, byProject: [], byFormat: [], byCategory: [], byDay: [] });
 });
 ```
 
@@ -551,6 +553,10 @@ export function analyticsRouter(db) {
               { $group: { _id: { $ifNull: ['$format', 'normal'] }, count: { $sum: 1 } } },
               { $sort: { count: -1 } },
             ],
+            byCategory: [
+              { $group: { _id: { $ifNull: ['$category', '(uncategorized)'] }, count: { $sum: 1 } } },
+              { $sort: { count: -1 } },
+            ],
             byDay: [
               { $group: {
                   _id: { $dateToString: { format: '%Y-%m-%d', date: '$createdAt' } },
@@ -568,6 +574,7 @@ export function analyticsRouter(db) {
         pushedToJira: facets.pushedToJira[0]?.n || 0,
         byProject: rename(facets.byProject),
         byFormat: rename(facets.byFormat),
+        byCategory: rename(facets.byCategory),
         byDay: facets.byDay.map(({ _id, count }) => ({ day: _id, count })),
       });
     } catch (e) { next(e); }
@@ -821,6 +828,8 @@ services:
       JIRA_BASE_URL: ${JIRA_BASE_URL:-}
       JIRA_EMAIL: ${JIRA_EMAIL:-}
       JIRA_API_TOKEN: ${JIRA_API_TOKEN:-}
+      OPENROUTER_API_KEY: ${OPENROUTER_API_KEY:-}
+      OPENROUTER_MODEL: ${OPENROUTER_MODEL:-anthropic/claude-3.5-haiku}
     depends_on:
       mongo:
         condition: service_healthy
@@ -859,6 +868,10 @@ MONGODB_URI=mongodb://localhost:27017/bugreports
 JIRA_BASE_URL=
 JIRA_EMAIL=
 JIRA_API_TOKEN=
+
+# Optional — enables POST /api/analytics/categorize (AI bug categorization).
+OPENROUTER_API_KEY=
+OPENROUTER_MODEL=anthropic/claude-3.5-haiku
 ```
 
 - [ ] **Step 4: Verify the stack boots**
@@ -1061,6 +1074,265 @@ npm start       # needs MONGODB_URI (see .env.example)
 ```bash
 git add README.md
 git commit -m "docs: self-hosted backend setup and API reference"
+```
+
+---
+
+### Task 8: AI categorization of historical reports via OpenRouter
+
+**Files:**
+- Create: `server/lib/categorize.js`
+- Modify: `server/routes/analytics.js` (add `POST /categorize`), `server/app.js` (pass `fetchImpl`/`env` to `analyticsRouter`)
+- Test: `server/test/categorize.test.js`
+- Modify: `README.md` (add categorize endpoint row to the API table; mention `OPENROUTER_API_KEY` / `OPENROUTER_MODEL`)
+
+**Interfaces:**
+- Consumes: `createApp(db, { fetchImpl, env })` from Tasks 1/4; `reports` collection from Task 2; summary `byCategory` facet from Task 3.
+- Produces: `CATEGORIES` const and `categorizeSummaries(summaries, { fetchImpl, env })` → `Promise<string[]>` (from `lib/categorize.js`); `POST /api/analytics/categorize?limit=` → `{ processed, remaining }`, 503 when `OPENROUTER_API_KEY` missing, 502 on upstream failure. `analyticsRouter(db, { fetchImpl, env })` gains a second options argument (defaulting to `{}`) — Task 3's call sites keep working.
+
+- [ ] **Step 1: Write the failing tests**
+
+`server/test/categorize.test.js`:
+```js
+import { test, before, after, beforeEach } from 'node:test';
+import assert from 'node:assert/strict';
+import request from 'supertest';
+import { createApp } from '../app.js';
+import { startMemoryMongo } from './helpers.js';
+
+let mem;
+before(async () => { mem = await startMemoryMongo(); });
+after(() => mem.stop());
+beforeEach(() => mem.db.collection('reports').deleteMany({}));
+
+const ENV = { OPENROUTER_API_KEY: 'sk-test', OPENROUTER_MODEL: 'test/model' };
+
+// OpenRouter chat-completions stub. `answers` is the JSON array the model returns.
+function fakeOpenRouter(answers, { status = 200, fail = false } = {}) {
+  const calls = [];
+  const fn = async (url, opts) => {
+    calls.push({ url, opts: { ...opts, body: JSON.parse(opts.body) } });
+    if (fail) throw new Error('ECONNREFUSED');
+    return {
+      status,
+      ok: status >= 200 && status < 300,
+      text: async () => JSON.stringify({
+        choices: [{ message: { content: JSON.stringify(answers) } }],
+      }),
+    };
+  };
+  fn.calls = calls;
+  return fn;
+}
+
+async function seed(n) {
+  const docs = [];
+  for (let i = 0; i < n; i++) {
+    docs.push({ summary: `bug ${i}`, projectKey: 'QA', createdAt: new Date('2026-07-01T10:00:00Z') });
+  }
+  await mem.db.collection('reports').insertMany(docs);
+}
+
+test('categorizes uncategorized reports and persists categories', async () => {
+  await seed(2);
+  const f = fakeOpenRouter(['UI', 'Crash']);
+  const app = createApp(mem.db, { fetchImpl: f, env: ENV });
+
+  const res = await request(app).post('/api/analytics/categorize');
+  assert.equal(res.status, 200);
+  assert.deepEqual(res.body, { processed: 2, remaining: 0 });
+
+  const docs = await mem.db.collection('reports').find().sort({ summary: 1 }).toArray();
+  assert.deepEqual(docs.map(d => d.category), ['UI', 'Crash']);
+  assert.ok(docs.every(d => d.categorizedAt instanceof Date));
+
+  // Request shape: auth header + model + summaries in the prompt.
+  const call = f.calls[0];
+  assert.equal(call.url, 'https://openrouter.ai/api/v1/chat/completions');
+  assert.equal(call.opts.headers.Authorization, 'Bearer sk-test');
+  assert.equal(call.opts.body.model, 'test/model');
+  assert.match(call.opts.body.messages[1].content, /bug 0/);
+});
+
+test('skips already-categorized reports and honors limit', async () => {
+  await seed(3);
+  await mem.db.collection('reports').updateOne({ summary: 'bug 0' }, { $set: { category: 'UI' } });
+  const f = fakeOpenRouter(['Functional']);
+  const app = createApp(mem.db, { fetchImpl: f, env: ENV });
+
+  const res = await request(app).post('/api/analytics/categorize?limit=1');
+  assert.deepEqual(res.body, { processed: 1, remaining: 1 });
+});
+
+test('invalid model category falls back to Other', async () => {
+  await seed(1);
+  const f = fakeOpenRouter(['Bananas']);
+  const app = createApp(mem.db, { fetchImpl: f, env: ENV });
+  await request(app).post('/api/analytics/categorize');
+  const doc = await mem.db.collection('reports').findOne();
+  assert.equal(doc.category, 'Other');
+});
+
+test('503 when no API key configured', async () => {
+  const app = createApp(mem.db, { fetchImpl: fakeOpenRouter([]), env: {} });
+  const res = await request(app).post('/api/analytics/categorize');
+  assert.equal(res.status, 503);
+  assert.match(res.body.error, /OPENROUTER_API_KEY/);
+});
+
+test('502 on OpenRouter failure, nothing persisted', async () => {
+  await seed(1);
+  const app = createApp(mem.db, { fetchImpl: fakeOpenRouter([], { fail: true }), env: ENV });
+  const res = await request(app).post('/api/analytics/categorize');
+  assert.equal(res.status, 502);
+  const doc = await mem.db.collection('reports').findOne();
+  assert.equal(doc.category, undefined);
+});
+
+test('200 with zero processed when nothing to categorize', async () => {
+  const app = createApp(mem.db, { fetchImpl: fakeOpenRouter([]), env: ENV });
+  const res = await request(app).post('/api/analytics/categorize');
+  assert.deepEqual(res.body, { processed: 0, remaining: 0 });
+});
+```
+
+- [ ] **Step 2: Run tests to verify they fail**
+
+Run: `cd server && node --test test/categorize.test.js`
+Expected: FAIL — 404 (route missing).
+
+- [ ] **Step 3: Implement lib/categorize.js**
+
+`server/lib/categorize.js`:
+```js
+// Categorizes bug summaries in one OpenRouter chat request.
+// Kept transport-injectable (fetchImpl) so tests never hit the network.
+
+export const CATEGORIES = [
+  'UI', 'Functional', 'Performance', 'Crash',
+  'Data', 'Security', 'Integration', 'Other',
+];
+
+const OPENROUTER_URL = 'https://openrouter.ai/api/v1/chat/completions';
+
+export async function categorizeSummaries(summaries, { fetchImpl = fetch, env = process.env } = {}) {
+  const apiKey = env.OPENROUTER_API_KEY;
+  if (!apiKey) throw Object.assign(new Error('OPENROUTER_API_KEY is not configured'), { status: 503 });
+
+  const model = env.OPENROUTER_MODEL || 'anthropic/claude-3.5-haiku';
+  const res = await fetchImpl(OPENROUTER_URL, {
+    method: 'POST',
+    headers: {
+      'Authorization': `Bearer ${apiKey}`,
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({
+      model,
+      messages: [
+        {
+          role: 'system',
+          content:
+            `You classify bug reports. Allowed categories: ${CATEGORIES.join(', ')}. ` +
+            'Reply with ONLY a JSON array of category strings, one per input bug, same order. No prose.',
+        },
+        {
+          role: 'user',
+          content: summaries.map((s, i) => `${i + 1}. ${s}`).join('\n'),
+        },
+      ],
+      temperature: 0,
+    }),
+  });
+
+  const text = await res.text();
+  if (res.status < 200 || res.status >= 300) {
+    throw Object.assign(new Error(`OpenRouter ${res.status}: ${text.slice(0, 300)}`), { status: 502 });
+  }
+
+  let cats;
+  try {
+    const content = JSON.parse(text).choices[0].message.content;
+    // Tolerate markdown code fences around the JSON array.
+    cats = JSON.parse(content.replace(/^```(?:json)?\s*|\s*```$/g, ''));
+  } catch {
+    throw Object.assign(new Error('OpenRouter returned unparseable content'), { status: 502 });
+  }
+  if (!Array.isArray(cats)) {
+    throw Object.assign(new Error('OpenRouter did not return an array'), { status: 502 });
+  }
+
+  // One category per summary; anything off-list becomes 'Other'.
+  return summaries.map((_, i) => (CATEGORIES.includes(cats[i]) ? cats[i] : 'Other'));
+}
+```
+
+- [ ] **Step 4: Add the route and thread options through app.js**
+
+In `server/routes/analytics.js`, change the signature and add the route (summary route from Task 3 is unchanged):
+```js
+import { Router } from 'express';
+import { categorizeSummaries } from '../lib/categorize.js';
+
+const MAX_BATCH = 50;
+
+export function analyticsRouter(db, { fetchImpl = fetch, env = process.env } = {}) {
+  const col = db.collection('reports');
+  const r = Router();
+
+  // ... existing GET /summary handler stays exactly as implemented in Task 3 ...
+
+  r.post('/categorize', async (req, res, next) => {
+    try {
+      const limit = Math.min(Number(req.query.limit) || MAX_BATCH, MAX_BATCH);
+      const docs = await col.find({ category: { $exists: false } })
+        .sort({ createdAt: 1 }).limit(limit).toArray();
+
+      if (!docs.length) return res.json({ processed: 0, remaining: 0 });
+
+      const cats = await categorizeSummaries(docs.map(d => d.summary || ''), { fetchImpl, env });
+
+      const now = new Date();
+      await col.bulkWrite(docs.map((d, i) => ({
+        updateOne: {
+          filter: { _id: d._id },
+          update: { $set: { category: cats[i], categorizedAt: now } },
+        },
+      })));
+
+      const remaining = await col.countDocuments({ category: { $exists: false } });
+      res.json({ processed: docs.length, remaining });
+    } catch (e) {
+      if (e.status) return res.status(e.status).json({ error: e.message });
+      next(e);
+    }
+  });
+
+  return r;
+}
+```
+
+In `server/app.js`, change the analytics mount:
+```js
+  app.use('/api/analytics', analyticsRouter(db, { fetchImpl, env }));
+```
+
+- [ ] **Step 5: Run tests to verify they pass**
+
+Run: `cd server && npm test`
+Expected: PASS — all test files, including the untouched summary tests.
+
+- [ ] **Step 6: Update README**
+
+In the README API table add:
+```markdown
+| `POST /api/analytics/categorize?limit=` | AI-categorize stored reports via OpenRouter (needs `OPENROUTER_API_KEY` in `.env`; categories: UI, Functional, Performance, Crash, Data, Security, Integration, Other) |
+```
+
+- [ ] **Step 7: Commit**
+
+```bash
+git add server/lib/categorize.js server/routes/analytics.js server/app.js server/test/categorize.test.js README.md
+git commit -m "feat(server): AI categorization of stored reports via OpenRouter"
 ```
 
 ---

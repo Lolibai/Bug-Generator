@@ -94,6 +94,26 @@ whichever proxy the config selects.
 - Manual verification: `docker compose up`, generate a report with Backend
   URL set, confirm it lands in Mongo and appears in `/api/analytics/summary`.
 
+## Addendum (2026-07-02): AI categorization of historical bug data
+
+Requested mid-implementation. The backend gains the ability to categorize
+stored reports with an LLM via the OpenRouter API:
+
+- New env vars: `OPENROUTER_API_KEY` (required for the feature),
+  `OPENROUTER_MODEL` (default `anthropic/claude-3.5-haiku`).
+- Fixed category set: `UI`, `Functional`, `Performance`, `Crash`,
+  `Data`, `Security`, `Integration`, `Other`.
+- `POST /api/analytics/categorize` — finds up to `limit` (default 50)
+  reports without a `category`, sends their summaries in one OpenRouter
+  chat request (JSON-only response contract), writes `category` +
+  `categorizedAt` back to each document. Returns
+  `{ processed, remaining }`. 503 if no API key configured; 502 on
+  OpenRouter failure. Invalid model output falls back to `Other`.
+- `GET /api/analytics/summary` gains a `byCategory` breakdown
+  (uncategorized reports appear as `(uncategorized)`).
+- OpenRouter calls go through the injectable `fetchImpl` so tests mock
+  the upstream.
+
 ## Out of scope (YAGNI)
 
 - Authentication/accounts (team-internal deployment).
