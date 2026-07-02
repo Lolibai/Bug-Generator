@@ -16,3 +16,9 @@ Thumbs.db
 
 # Local exports / downloads.
 bra-*.json
+
+# Dependencies
+node_modules/
+
+# SDD scratch
+.superpowers/
