@@ -8,6 +8,11 @@ function renderSetup() {
   document.getElementById('sToken').value = cfg.jiraToken   || '';
   document.getElementById('sProxy').value = cfg.proxyUrl    || '';
   document.getElementById('sBackend').value = cfg.backendUrl || '';
+  // When the app is served by the backend itself (not file:// or a static
+  // host), the origin IS the backend — suggest it so phone users can copy it.
+  if (/^https?:$/.test(location.protocol)) {
+    document.getElementById('sBackend').placeholder = location.origin;
+  }
   const envEl = document.getElementById('sDefEnv');
   if (envEl) envEl.value = cfg.defaultEnvironment || '';
   renderRules();
