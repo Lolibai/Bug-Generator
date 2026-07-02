@@ -1333,3 +1333,28 @@ function maybeShowMicHint() {
     'Mic permission will re-prompt on every reload (file:// limitation). ' +
     'Run <strong>serve.bat</strong> once to open via http://localhost — Chrome will then remember Allow.';
 }
+
+// ── proactive mic permission ──────────────────────────────────────────────
+// Ask for the microphone once on page load so the first dictation tap
+// doesn't stall on the browser prompt. Silent no-op when: insecure context
+// (Chrome blocks mic on plain-HTTP LAN anyway), already granted/denied, or
+// APIs unavailable. The per-tap flow in toggleRec() stays the fallback.
+async function prewarmMicPermission() {
+  if (!window.isSecureContext) return;
+  if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) return;
+  try {
+    if (navigator.permissions && navigator.permissions.query) {
+      const st = await navigator.permissions.query({ name: 'microphone' });
+      if (st.state !== 'prompt') return;           // granted or denied — nothing to ask
+    } else {
+      // No Permissions API: ask at most once per tab session.
+      if (sessionStorage.getItem('bra_mic_prewarmed')) return;
+      sessionStorage.setItem('bra_mic_prewarmed', '1');
+    }
+    const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+    stream.getTracks().forEach(t => t.stop());     // permission secured; release the device
+  } catch (e) {
+    console.warn('Mic permission pre-warm skipped:', e.name || e);
+  }
+}
+document.addEventListener('DOMContentLoaded', prewarmMicPermission);
