@@ -24,15 +24,15 @@ browser (MediaRecorder blob)
 
 - New `whisper/` directory: `Dockerfile` (python3.11-slim + faster-whisper +
   fastapi/uvicorn + python-multipart) and `app.py` (~50 lines).
-- compose service `whisper`: GPU via
-  `deploy.resources.reservations.devices` (`nvidia`, count 1), model cache
-  in named volume `whisper-models`, env `WHISPER_MODEL`
-  (default `large-v3-turbo`; set `large-v3` for max accuracy),
-  `WHISPER_DEVICE` (default `cuda`, `cpu` fallback), healthcheck on
-  `GET /healthz`. Not published to the host network — only the app service
-  reaches it on the compose network (`http://whisper:9000`).
-- Host prerequisite: nvidia-container-toolkit (README documents install +
-  the `WHISPER_DEVICE=cpu` escape hatch).
+- compose service `whisper`: CPU-safe by default (`WHISPER_DEVICE=auto`) so
+  the base compose runs unchanged on MacBook Pros and other non-NVIDIA
+  hosts; GPU passthrough is opt-in via `docker-compose.gpu.yml`
+  (`COMPOSE_FILE=docker-compose.yml:docker-compose.gpu.yml` in `.env`,
+  requires nvidia-container-toolkit). Model cache in named volume
+  `whisper-models`; env `WHISPER_MODEL` (default `large-v3-turbo`; set
+  `large-v3` for max accuracy). Healthcheck on `GET /healthz`. Not
+  published to the host network — only the app service reaches it on the
+  compose network (`http://whisper:9000`).
 
 ## Components
 
