@@ -73,8 +73,8 @@ let cleanupSeq = 0;
 
 async function maybeTranscribeGpt4o(audioBlob) {
   if (!audioBlob || !audioBlob.size) return;
-  if (!apiKey) return;
-  if (typeof transcribeWithGpt4o !== 'function') return;
+  if (cfg.voiceAiCleanup === 'gpt4o-transcribe' && !apiKey) return;
+  if (typeof transcribeAudio !== 'function') return;
   const ta = document.getElementById('tin');
   if (!ta) return;
 
@@ -88,7 +88,7 @@ async function maybeTranscribeGpt4o(audioBlob) {
 
   let transcribed = '';
   try {
-    transcribed = await transcribeWithGpt4o(audioBlob, transcribeLanguageHint(lang));
+    transcribed = await transcribeAudio(audioBlob, transcribeLanguageHint(lang));
   } catch (e) {
     try { toast('⚠ GPT-4o transcription failed — keeping browser transcript (' + e.message + ')'); } catch {}
   }
@@ -540,7 +540,7 @@ async function openPipController() {
       pipPauseRequested = true;
       // GPT-4o: Pause kicks off a transcription network call — surface a
       // spinner immediately so the wait is obvious.
-      if (cfg.voiceAiCleanup === 'gpt4o-transcribe') showPipTranscribing();
+      if (isAudioTranscribeMode()) showPipTranscribing();
       try { stopRec(); } catch {}
     });
 
@@ -720,7 +720,7 @@ function setPipMode(mode) {
     body.removeAttribute('contenteditable');
     body.classList.remove('editable');
 
-    const gpt4o = (cfg.voiceAiCleanup === 'gpt4o-transcribe');
+    const gpt4o = isAudioTranscribeMode();
     const seed  = (baseText || '').trim();
     if (gpt4o) {
       // No live transcript in GPT-4o mode — show an animated equalizer so the
@@ -908,7 +908,7 @@ function eqBarsMarkup(id) {
 // slower decay (they fall back smoothly) — so the equalizer visibly reacts
 // to every word.
 function updatePipEqLevel(rms) {
-  if (cfg.voiceAiCleanup !== 'gpt4o-transcribe') return;
+  if (isAudioTranscribeMode()) return;
   const gated = Math.max(0, rms - 0.006);          // ignore background hiss
   const lvl   = Math.min(1, Math.sqrt(gated * 9)); // 0.03 rms → ~0.47, 0.12 → ~1
   eqLevel = lvl > eqLevel
@@ -1020,7 +1020,7 @@ function stopRecogWatchdog() {
 }
 
 function gpt4oTranscribeEnabled() {
-  return cfg.voiceAiCleanup === 'gpt4o-transcribe';
+  return isAudioTranscribeMode();
 }
 
 function transcribeLanguageHint(recLang) {
@@ -1094,7 +1094,7 @@ function onRecogStart() {
   document.getElementById('micBtn').classList.add('rec');
   // GPT-4o Transcribe records cleanly and reveals text only on Pause/Stop —
   // so the status reflects "recording" rather than "live transcribing".
-  const gpt4o = (cfg.voiceAiCleanup === 'gpt4o-transcribe');
+  const gpt4o = isAudioTranscribeMode();
   document.getElementById('vSt').textContent = gpt4o ? '🔴 Recording…' : 'Listening…';
   document.getElementById('vHt').textContent = gpt4o
     ? 'Speak freely — GPT-4o transcribes your audio when you Pause or Stop'
@@ -1113,7 +1113,7 @@ function onRecogResult(e) {
   // audio and the polished text appears only after Pause/Stop (ChatGPT-style).
   // We still let Web Speech run (it drives the start/stop lifecycle) but drop
   // its low-quality interim text so nothing jumpy lands in the textarea.
-  if (cfg.voiceAiCleanup === 'gpt4o-transcribe') return;
+  if (isAudioTranscribeMode()) return;
   // Re-collect the full state of this frame (Chrome may give us several
   // result entries — some final, some interim). We stitch them, then
   // diff against the previous frame to figure out what's new.
@@ -1205,7 +1205,7 @@ function teardownAfterStop() {
   // button, page navigation) closes the PiP as before.
   if (pipPauseRequested && pipWindow) {
     pipPauseRequested = false;
-    if (cfg.voiceAiCleanup === 'gpt4o-transcribe') {
+    if (isAudioTranscribeMode()) {
       // GPT-4o mode: transcribe the audio captured up to this Pause and write
       // it into the textarea FIRST, then flip to edit mode (which seeds the
       // PiP body from the textarea) so the user sees the result. Resume then
@@ -1222,7 +1222,7 @@ function teardownAfterStop() {
     closePipController();
     stopTranscribeRecording().then(audioBlob => {
       releaseMicStream();
-      if (cfg.voiceAiCleanup === 'gpt4o-transcribe') maybeTranscribeGpt4o(audioBlob);
+      if (isAudioTranscribeMode()) maybeTranscribeGpt4o(audioBlob);
     });
   }
 }

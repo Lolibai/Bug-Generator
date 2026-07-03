@@ -58,6 +58,10 @@ const DEFAULTS = {
   // install must still produce text out of the box. Retired modes
   // (true / 'stop' / 'live' / 'whisper-turbo') migrate to 'gpt4o-transcribe'.
   voiceAiCleanup: false,
+  // Off-by-default-safe: an LLM pass that fixes STT typos/misheard words
+  // after transcription (Local Whisper / GPT-4o Transcribe). Only runs when
+  // an API key is present, so it's harmless to default to true.
+  transcriptPolish: true,
   // ── Linked work items (Setup → Linked work items) ────────────────────────
   // Project-default tickets every generated bug gets linked to. Auto-filled
   // by Analyze Template (when the reference bug shows linked issues) and

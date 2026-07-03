@@ -211,7 +211,7 @@ function startCardRec(card) {
     // Pause/Stop. Web Speech still runs to drive the lifecycle; we just drop
     // its low-quality interim text. The Session PiP shows an animated
     // equalizer instead (see _renderSessionPip).
-    if (cfg.voiceAiCleanup === 'gpt4o-transcribe') return;
+    if (isAudioTranscribeMode()) return;
     let frameFinal   = '';
     let frameInterim = '';
     for (let i = 0; i < e.results.length; i++) {
@@ -275,7 +275,7 @@ function startCardRec(card) {
       if (typeof releaseMicStream === 'function' && !sessionCards.some(c => c.isRec)) {
         releaseMicStream();
       }
-      if (cfg.voiceAiCleanup === 'gpt4o-transcribe') return maybeTranscribeCardWithGpt4o(card, baseTxt, audioBlob);
+      if (isAudioTranscribeMode()) return maybeTranscribeCardWithGpt4o(card, baseTxt, audioBlob);
       return null;
     }).finally(() => {
       if (stopDoneResolve) stopDoneResolve();
@@ -308,7 +308,7 @@ function stopCardRec(card) {
 
 async function maybeTranscribeCardWithGpt4o(card, baseTxt, audioBlob) {
   if (!audioBlob || !audioBlob.size) return;
-  if (!apiKey || typeof transcribeWithGpt4o !== 'function') return;
+  if ((cfg.voiceAiCleanup === 'gpt4o-transcribe' && !apiKey) || typeof transcribeAudio !== 'function') return;
 
   // Mark the card as in-flight and repaint statuses everywhere — the Batch
   // page shows "⏳ transcribing…" and the PiP accordion shows a blue
@@ -326,7 +326,7 @@ async function maybeTranscribeCardWithGpt4o(card, baseTxt, audioBlob) {
     let transcribed = '';
     try {
       const hint = typeof transcribeLanguageHint === 'function' ? transcribeLanguageHint(sessionLang) : '';
-      transcribed = await transcribeWithGpt4o(audioBlob, hint);
+      transcribed = await transcribeAudio(audioBlob, hint);
     } catch (e) {
       try { toast('⚠ GPT-4o transcription failed — keeping browser transcript (' + e.message + ')'); } catch {}
     }
@@ -759,7 +759,7 @@ function _renderSessionPip() {
     let inner;
     let dimCls = '';
     if (isActive && !sessionPipPaused) {
-      if (cfg.voiceAiCleanup === 'gpt4o-transcribe') {
+      if (isAudioTranscribeMode()) {
         // GPT-4o mode shows no live transcript — render the Siri-style
         // equalizer that reacts to the live mic level (updatePipEqLevel).
         const eq = (typeof eqBarsMarkup === 'function')
@@ -925,7 +925,7 @@ async function onSessionPipPause() {
     // GPT-4o: stopping the card kicks off a transcription network call that
     // `await stopCardRec` blocks on — show a spinner immediately so the wait
     // is obvious (otherwise the equalizer just freezes).
-    if (cfg.voiceAiCleanup === 'gpt4o-transcribe') showSessionPipTranscribing();
+    if (isAudioTranscribeMode()) showSessionPipTranscribing();
     await stopCardRec(card);
   }
 

@@ -19,6 +19,8 @@ function renderSetup() {
   renderFields();
   renderDefaultEnvStatus();
   renderVoiceCleanupToggle();
+  const polishEl = document.getElementById('polishChk');
+  if (polishEl) polishEl.checked = cfg.transcriptPolish !== false;
   renderLinkedWorkItems();
   refreshRestoreRulesUI();
   refreshRestoreFieldsUI();
@@ -104,31 +106,66 @@ function removeLinkedWorkItem(i) {
   renderLinkedWorkItems();
 }
 
-// ── Dictation: Web Speech only / GPT-4o Transcribe ─────────────────────────
+// ── Dictation: Web Speech only / GPT-4o Transcribe / Local Whisper ─────────
 // Persisted immediately (like the Context-words threshold) — flipping the
 // engine shouldn't require remembering to hit 💾 Save at the bottom.
-// cfg.voiceAiCleanup stores: false = off · 'gpt4o-transcribe'.
+// cfg.voiceAiCleanup stores: false = off · 'gpt4o-transcribe' · 'local-whisper'.
 // Retired modes (true / 'stop' / 'live' / 'whisper-turbo') migrate to
 // 'gpt4o-transcribe' in migrateCfg / importCfg.
+const AUDIO_TRANSCRIBE_MODES = ['gpt4o-transcribe', 'local-whisper'];
+
 function voiceCleanupMode() {
-  return cfg.voiceAiCleanup === 'gpt4o-transcribe' ? 'gpt4o-transcribe' : 'off';
+  return AUDIO_TRANSCRIBE_MODES.includes(cfg.voiceAiCleanup) ? cfg.voiceAiCleanup : 'off';
+}
+
+// True when the current dictation mode records audio and transcribes it
+// after Pause/Stop (as opposed to the live Web Speech preview).
+function isAudioTranscribeMode() {
+  return AUDIO_TRANSCRIBE_MODES.includes(cfg.voiceAiCleanup);
 }
 
 function renderVoiceCleanupToggle() {
   const mode = voiceCleanupMode();
   const off  = document.getElementById('vcOff');
   const g4o  = document.getElementById('vcGpt4oTranscribe');
-  if (off)  off.classList.toggle('active',  mode === 'off');
-  if (g4o)  g4o.classList.toggle('active',  mode === 'gpt4o-transcribe');
+  const lw   = document.getElementById('vcLocalWhisper');
+  if (off) off.classList.toggle('active', mode === 'off');
+  if (g4o) g4o.classList.toggle('active', mode === 'gpt4o-transcribe');
+  if (lw)  lw.classList.toggle('active', mode === 'local-whisper');
 }
 
 function setVoiceCleanup(mode) {
-  cfg.voiceAiCleanup = (mode === 'gpt4o-transcribe') ? 'gpt4o-transcribe' : false;
+  cfg.voiceAiCleanup = AUDIO_TRANSCRIBE_MODES.includes(mode) ? mode : false;
   localStorage.setItem('bra_cfg', JSON.stringify(cfg));
   renderVoiceCleanupToggle();
   toast(mode === 'gpt4o-transcribe'
     ? '✓ GPT-4o Transcribe — final text is transcribed from audio after Pause / Stop'
-    : '✓ Web Speech only — transcript is kept exactly as recognized');
+    : mode === 'local-whisper'
+      ? '✓ Local Whisper — audio is transcribed on your own server after Pause / Stop'
+      : '✓ Web Speech only — transcript is kept exactly as recognized');
+}
+
+function setTranscriptPolish(on) {
+  cfg.transcriptPolish = !!on;
+  localStorage.setItem('bra_cfg', JSON.stringify(cfg));
+  toast(on ? '✓ Transcripts get an AI polish pass' : '✓ Raw transcripts (no AI polish)');
+}
+
+// Show the Local Whisper option only when the backend reports the
+// whisper container healthy. If the saved mode is local-whisper but the
+// service is gone, fall back to Web Speech so dictation never dead-ends.
+async function renderLocalWhisperOption() {
+  const btn = document.getElementById('vcLocalWhisper');
+  const base = effectiveBackendUrl();
+  if (!btn) return;
+  if (!base) { btn.style.display = 'none'; return; }
+  try {
+    const j = await (await fetch(base + '/api/transcribe/status')).json();
+    btn.style.display = j.ok ? '' : 'none';
+    if (!j.ok && cfg.voiceAiCleanup === 'local-whisper') setVoiceCleanup(false);
+  } catch {
+    btn.style.display = 'none';
+  }
 }
 
 // Updates the "not set / N chars" badge in the Default Environment card.
@@ -663,9 +700,10 @@ function importCfg(e) {
       // 'gpt4o-transcribe'; anything unrecognized falls back to the default.
       if (cfg.voiceAiCleanup === true || cfg.voiceAiCleanup === 'stop' || cfg.voiceAiCleanup === 'whisper-turbo' || cfg.voiceAiCleanup === 'live') {
         cfg.voiceAiCleanup = 'gpt4o-transcribe';
-      } else if (cfg.voiceAiCleanup !== false && cfg.voiceAiCleanup !== 'gpt4o-transcribe') {
+      } else if (cfg.voiceAiCleanup !== false && !AUDIO_TRANSCRIBE_MODES.includes(cfg.voiceAiCleanup)) {
         cfg.voiceAiCleanup = DEFAULTS.voiceAiCleanup;
       }
+      if (typeof cfg.transcriptPolish !== 'boolean') cfg.transcriptPolish = true;
       if (!Array.isArray(cfg.contextWords)) cfg.contextWords = [];
       cfg.linkedWorkItems = normalizeLinkedWorkItems(cfg.linkedWorkItems);
       cfg.reportTemplate = typeof normalizeReportTemplate === 'function'
@@ -707,6 +745,7 @@ async function detectBackend() {
   } catch { /* static hosting — no backend here */ }
   renderLanHint();
   renderServerJiraStatus();
+  renderLocalWhisperOption();
 }
 
 // "📱 Phone access" link in Setup: LAN IP from the backend + our own port.

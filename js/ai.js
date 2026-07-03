@@ -214,6 +214,57 @@ async function transcribeWithGpt4o(audioBlob, languageHint) {
   return String(data.text || data.transcription || data.output_text || '').trim();
 }
 
+// ── Local Whisper via the backend proxy (whisper container) ────────────────
+// languageHint is the same value transcribeLanguageHint() produces
+// ('uk' / 'en' / '').
+async function transcribeWithLocalWhisper(audioBlob, languageHint) {
+  const base = effectiveBackendUrl();
+  if (!base) throw new Error('No backend available for Local Whisper');
+  if (!audioBlob || !audioBlob.size) throw new Error('No audio was recorded');
+  const fd = new FormData();
+  const ext = audioBlob.type.includes('ogg') ? 'ogg' : audioBlob.type.includes('mp4') ? 'mp4' : 'webm';
+  fd.append('file', audioBlob, 'dictation.' + ext);
+  if (languageHint) fd.append('language', languageHint);
+  // Glossary terms bias Whisper toward the exact product spellings.
+  const terms = (cfg.contextWords || []).map(w => w && w.term).filter(Boolean);
+  if (terms.length) fd.append('prompt', terms.join(', '));
+  const res = await fetch(base + '/api/transcribe', { method: 'POST', body: fd });
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok) throw new Error(data.error || data.detail || `HTTP ${res.status}`);
+  return String(data.text || '').trim();
+}
+
+// AI "agent eye": fix STT typos/misheard words. Never blocks — on any
+// failure (no key, network, provider error) the raw transcript is returned.
+async function polishTranscript(text) {
+  if (!cfg.transcriptPolish || !apiKey || !text) return text;
+  const terms = (cfg.contextWords || []).map(w => w && w.term).filter(Boolean);
+  const sys =
+    'You fix speech-to-text recognition errors in QA bug dictations. ' +
+    'Correct misheard words, typos and broken product terms only. ' +
+    (terms.length ? `Prefer these exact spellings when a word sounds like one of them: ${terms.join(', ')}. ` : '') +
+    'Keep the original language (Ukrainian stays Ukrainian, English stays English), keep the meaning, ' +
+    'do NOT add, summarize or restructure anything. Reply with ONLY the corrected text.';
+  try {
+    const out = await callAi(sys, text);
+    const cleaned = String(out || '').trim();
+    return cleaned || text;
+  } catch (e) {
+    console.warn('Transcript polish skipped:', e.message || e);
+    return text;
+  }
+}
+
+// Single entry point for the record-then-transcribe modes (GPT-4o Transcribe
+// / Local Whisper). All call sites should use this instead of calling
+// transcribeWithGpt4o directly, so both modes get the same polish pass.
+async function transcribeAudio(audioBlob, languageHint) {
+  const raw = cfg.voiceAiCleanup === 'local-whisper'
+    ? await transcribeWithLocalWhisper(audioBlob, languageHint)
+    : await transcribeWithGpt4o(audioBlob, languageHint);
+  return polishTranscript(raw);
+}
+
 // ── robust JSON extraction ────────────────────────────────────────────────
 // Models occasionally wrap JSON in ``` fences, add trailing prose, or emit
 // raw newlines / tabs inside string values. This helper survives all of

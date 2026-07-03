@@ -211,11 +211,17 @@
           <div class="lang-toggle" style="background:var(--surface2);display:inline-flex">
             <button class="lang-btn" id="vcOff"  onclick="setVoiceCleanup('off')">Web Speech only</button>
             <button class="lang-btn" id="vcGpt4oTranscribe" onclick="setVoiceCleanup('gpt4o-transcribe')">🤖 GPT-4o Transcribe</button>
+            <button class="lang-btn" id="vcLocalWhisper" onclick="setVoiceCleanup('local-whisper')" style="display:none">🏠 Local Whisper</button>
           </div>
           <div style="margin-top:10px;font-size:12px;color:var(--dim);font-family:'IBM Plex Mono',monospace;line-height:1.6">
             <strong style="color:var(--muted)">Web Speech only</strong> — instant live transcript from the browser recognizer (Context-words glossary still auto-corrects terms as you speak).<br>
-            <strong style="color:var(--muted)">🤖 GPT-4o Transcribe</strong> — records clean audio while you dictate (Siri-style equalizer instead of a live draft); the accurate, multilingual transcript appears after Pause / Stop. Handles the Ukrainian + English-terms mix in either direction. Needs OpenRouter selected with an OpenRouter API key; if a call fails, nothing is lost — re-record or type.
+            <strong style="color:var(--muted)">🤖 GPT-4o Transcribe</strong> — records clean audio while you dictate (Siri-style equalizer instead of a live draft); the accurate, multilingual transcript appears after Pause / Stop. Handles the Ukrainian + English-terms mix in either direction. Needs OpenRouter selected with an OpenRouter API key; if a call fails, nothing is lost — re-record or type.<br>
+            <strong style="color:var(--muted)">🏠 Local Whisper</strong> — same recording flow, but the audio is transcribed on your own server's whisper container instead of a cloud API. Only shown when the backend reports the service healthy.
           </div>
+          <label style="display:flex;align-items:center;gap:8px;margin-top:10px;font-size:12px;color:var(--muted);cursor:pointer">
+            <input type="checkbox" id="polishChk" onchange="setTranscriptPolish(this.checked)" style="width:auto;min-height:0">
+            ✨ AI polish after transcription — an LLM fixes typos &amp; misheard words (uses your API key)
+          </label>
         </div>
       </div>
 
