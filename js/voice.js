@@ -908,7 +908,7 @@ function eqBarsMarkup(id) {
 // slower decay (they fall back smoothly) — so the equalizer visibly reacts
 // to every word.
 function updatePipEqLevel(rms) {
-  if (isAudioTranscribeMode()) return;
+  if (!isAudioTranscribeMode()) return;
   const gated = Math.max(0, rms - 0.006);          // ignore background hiss
   const lvl   = Math.min(1, Math.sqrt(gated * 9)); // 0.03 rms → ~0.47, 0.12 → ~1
   eqLevel = lvl > eqLevel
