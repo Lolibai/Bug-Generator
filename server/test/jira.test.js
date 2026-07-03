@@ -92,15 +92,32 @@ test('proxy falls back to Mongo-stored settings when body has no creds', async (
   await mem.db.collection('settings').deleteMany({});
 });
 
-test('request-body creds beat stored settings', async () => {
+test('env creds beat body and stored', async () => {
+  await mem.db.collection('settings').updateOne(
+    { _id: 'jira' },
+    { $set: { jiraUrl: 'https://stored.atlassian.net', jiraEmail: 's@x.com', jiraToken: 'stok' } },
+    { upsert: true });
+  const f = fakeFetch();
+  const app = createApp(mem.db, {
+    fetchImpl: f,
+    env: { JIRA_BASE_URL: 'https://env.atlassian.net', JIRA_EMAIL: 'e@x.com', JIRA_API_TOKEN: 'etok' },
+  });
+  const res = await request(app).post('/api/jira').send(envelope); // envelope carries body creds
+  assert.equal(res.status, 200);
+  assert.equal(f.calls[0].url, 'https://env.atlassian.net/rest/api/3/myself');
+  const auth = f.calls[0].opts.headers.Authorization;
+  assert.equal(auth, 'Basic ' + Buffer.from('e@x.com:etok').toString('base64'));
+  await mem.db.collection('settings').deleteMany({});
+});
+
+test('stored beats body when env empty', async () => {
   await mem.db.collection('settings').updateOne(
     { _id: 'jira' },
     { $set: { jiraUrl: 'https://stored.atlassian.net', jiraEmail: 's@x.com', jiraToken: 'stok' } },
     { upsert: true });
   const f = fakeFetch();
   const app = createApp(mem.db, { fetchImpl: f, env: {} });
-  const res = await request(app).post('/api/jira').send(envelope);
-  assert.equal(res.status, 200);
-  assert.equal(f.calls[0].url, 'https://acme.atlassian.net/rest/api/3/myself');
+  await request(app).post('/api/jira').send(envelope);
+  assert.equal(f.calls[0].url, 'https://stored.atlassian.net/rest/api/3/myself');
   await mem.db.collection('settings').deleteMany({});
 });

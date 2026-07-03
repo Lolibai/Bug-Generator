@@ -28,7 +28,7 @@ export function createApp(db, { fetchImpl = fetch, env = process.env } = {}) {
   app.use('/api/analytics', analyticsRouter(db, { fetchImpl, env }));
   app.use('/api/jira', jiraRouter({ fetchImpl, env, db }));
   app.use('/api/info', infoRouter({ env }));
-  app.use('/api/settings', settingsRouter(db));
+  app.use('/api/settings', settingsRouter(db, { env }));
   app.use('/api/transcribe', transcribeRouter({ fetchImpl, env }));
   app.use('/api/ai', aiRouter({ fetchImpl, env }));
 

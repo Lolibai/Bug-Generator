@@ -9,12 +9,12 @@ export function jiraRouter({ fetchImpl = fetch, env = process.env, db } = {}) {
   r.post('/', async (req, res) => {
     const b = req.body || {};
     let stored = null;
-    if (db && (!b.jiraUrl || !b.jiraEmail || !b.jiraToken)) {
+    if (db) {
       stored = await db.collection('settings').findOne({ _id: 'jira' }).catch(() => null);
     }
-    const jiraUrl   = b.jiraUrl   || (stored && stored.jiraUrl)   || env.JIRA_BASE_URL;
-    const jiraEmail = b.jiraEmail || (stored && stored.jiraEmail) || env.JIRA_EMAIL;
-    const jiraToken = b.jiraToken || (stored && stored.jiraToken) || env.JIRA_API_TOKEN;
+    const jiraUrl   = env.JIRA_BASE_URL  || (stored && stored.jiraUrl)   || b.jiraUrl;
+    const jiraEmail = env.JIRA_EMAIL     || (stored && stored.jiraEmail) || b.jiraEmail;
+    const jiraToken = env.JIRA_API_TOKEN || (stored && stored.jiraToken) || b.jiraToken;
     const { path, method = 'GET', body } = b;
 
     if (!jiraUrl || !jiraEmail || !jiraToken || !path) {

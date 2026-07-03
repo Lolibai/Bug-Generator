@@ -3,7 +3,7 @@ import { Router } from 'express';
 // Server-stored Jira credentials (Mongo `settings` collection, _id 'jira').
 // The token is write-only from the API's perspective: GET/PUT responses
 // only ever expose a tokenSet boolean.
-export function settingsRouter(db) {
+export function settingsRouter(db, { env = process.env } = {}) {
   const col = db.collection('settings');
   const r = Router();
 
@@ -14,7 +14,16 @@ export function settingsRouter(db) {
   });
 
   r.get('/jira', async (_req, res, next) => {
-    try { res.json(publicShape(await col.findOne({ _id: 'jira' }))); }
+    try {
+      const envConfigured = !!(env.JIRA_BASE_URL && env.JIRA_EMAIL && env.JIRA_API_TOKEN);
+      const doc = await col.findOne({ _id: 'jira' });
+      const shape = publicShape(doc);
+      res.json({
+        ...shape,
+        envConfigured,
+        source: envConfigured ? 'env' : (shape.tokenSet ? 'server' : 'none'),
+      });
+    }
     catch (e) { next(e); }
   });
 
