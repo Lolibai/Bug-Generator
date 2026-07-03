@@ -395,6 +395,24 @@ From now on every generated report is also stored centrally, and Jira
 pushes go through the backend (Backend URL takes precedence over Proxy URL;
 both remain configurable).
 
+### Team zero-setup via .env
+
+Fill these on the server and your teammates configure NOTHING in the UI —
+open the LAN URL and everything works ( `.env` has top priority; anything
+typed in Setup is only used when the server value is absent):
+
+| Var | Enables |
+|---|---|
+| `OPENROUTER_API_KEY` (or `ANTHROPIC_API_KEY`) | report generation, template analysis, transcript polish — no browser key needed |
+| `JIRA_BASE_URL`, `JIRA_EMAIL`, `JIRA_API_TOKEN` | Push to Jira for everyone |
+| `HOST_IP` | the in-app "📱 Phone access (LAN)" link |
+| `WHISPER_MODEL` / `WHISPER_DEVICE` (optional) | local dictation defaults |
+
+**⚙️ Setup → Connection status** shows a live check of every service —
+Backend, Database, AI (which key source is active), Jira (real login
+check), Whisper — and a green status dot in the sidebar means "all
+connected".
+
 ### Use it from your phone (LAN)
 
 The docker stack listens on all interfaces, so any device on your network
