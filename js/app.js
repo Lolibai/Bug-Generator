@@ -85,8 +85,14 @@ function migrateCfg() {
   if (cfg.voiceAiCleanup === true || cfg.voiceAiCleanup === 'stop' || cfg.voiceAiCleanup === 'whisper-turbo' || cfg.voiceAiCleanup === 'live') {
     cfg.voiceAiCleanup = 'gpt4o-transcribe';
     changed = true;
-  } else if (cfg.voiceAiCleanup !== false && cfg.voiceAiCleanup !== 'gpt4o-transcribe') {
+  } else if (cfg.voiceAiCleanup !== false && !AUDIO_TRANSCRIBE_MODES.includes(cfg.voiceAiCleanup)) {
     cfg.voiceAiCleanup = DEFAULTS.voiceAiCleanup;
+    changed = true;
+  }
+  // Transcript polish — new in this build. Backfill the documented default
+  // so existing installs actually get AI polish on instead of silently off.
+  if (typeof cfg.transcriptPolish !== 'boolean') {
+    cfg.transcriptPolish = true;
     changed = true;
   }
   // Linked work items — backfill + normalize rows saved by older builds.

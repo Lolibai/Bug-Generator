@@ -81,16 +81,19 @@ async function maybeTranscribeGpt4o(audioBlob) {
   const base = baseText;
   const snapshot = ta.value;
   const seq = ++cleanupSeq;
+  const engineName = cfg.voiceAiCleanup === 'local-whisper' ? 'Local Whisper' : 'GPT-4o';
   const st = document.getElementById('vSt');
   const ht = document.getElementById('vHt');
-  if (st) st.textContent = 'Transcribing with GPT-4o…';
-  if (ht) ht.textContent = 'OpenRouter is transcribing the recorded audio — browser preview stays until it returns';
+  if (st) st.textContent = `Transcribing with ${engineName}…`;
+  if (ht) ht.textContent = cfg.voiceAiCleanup === 'local-whisper'
+    ? 'Local Whisper is transcribing the recorded audio — browser preview stays until it returns'
+    : 'OpenRouter is transcribing the recorded audio — browser preview stays until it returns';
 
   let transcribed = '';
   try {
     transcribed = await transcribeAudio(audioBlob, transcribeLanguageHint(lang));
   } catch (e) {
-    try { toast('⚠ GPT-4o transcription failed — keeping browser transcript (' + e.message + ')'); } catch {}
+    try { toast(`⚠ ${engineName} transcription failed — keeping browser transcript (` + e.message + ')'); } catch {}
   }
 
   if (seq === cleanupSeq && !isRec) {
@@ -104,12 +107,12 @@ async function maybeTranscribeGpt4o(audioBlob) {
   const next = (base ? base + ' ' : '') + transcribed;
   if (ta.value === snapshot) {
     ta.value = next;
-    try { toast('✓ GPT-4o transcript applied'); } catch {}
+    try { toast(`✓ ${engineName} transcript applied`); } catch {}
   } else {
     const currentTail = (base && snapshot.startsWith(base)) ? snapshot.slice(base.length).trim() : snapshot.trim();
     if (currentTail && ta.value.includes(currentTail)) {
       ta.value = ta.value.replace(currentTail, transcribed);
-      try { toast('✓ GPT-4o transcript applied'); } catch {}
+      try { toast(`✓ ${engineName} transcript applied`); } catch {}
     }
   }
 }
@@ -768,15 +771,16 @@ function showPipTranscribing() {
   const label    = doc.getElementById('pipHeadLabel');
   const dot      = doc.getElementById('pipRecDot');
   const body     = doc.getElementById('pipBody');
+  const engineName = cfg.voiceAiCleanup === 'local-whisper' ? 'Local Whisper' : 'GPT-4o';
   if (pauseBtn) { pauseBtn.disabled = true; pauseBtn.innerHTML = '<span class="pip-spin"></span> Transcribing…'; }
   if (stopBtn)  { stopBtn.disabled = true; }
-  if (label)    label.textContent = 'Transcribing with GPT-4o…';
+  if (label)    label.textContent = `Transcribing with ${engineName}…`;
   if (dot)      { dot.classList.remove('paused'); dot.classList.add('transcribing'); }
   if (body)     {
     body.classList.add('empty');
     body.innerHTML =
       '<div class="pip-rec"><span class="pip-spin pip-spin-lg"></span>' +
-      '<div class="pip-rec-label">Transcribing with GPT-4o…</div></div>';
+      `<div class="pip-rec-label">Transcribing with ${engineName}…</div></div>`;
   }
 }
 
@@ -1097,7 +1101,7 @@ function onRecogStart() {
   const gpt4o = isAudioTranscribeMode();
   document.getElementById('vSt').textContent = gpt4o ? '🔴 Recording…' : 'Listening…';
   document.getElementById('vHt').textContent = gpt4o
-    ? 'Speak freely — GPT-4o transcribes your audio when you Pause or Stop'
+    ? `Speak freely — ${cfg.voiceAiCleanup === 'local-whisper' ? 'Local Whisper' : 'GPT-4o'} transcribes your audio when you Pause or Stop`
     : 'Tap again to stop · floating Stop button on your desktop works from any tab';
   document.getElementById('vHt').classList.add('rec');
   setRecordingBadges(true);

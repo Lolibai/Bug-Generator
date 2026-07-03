@@ -81,8 +81,9 @@ function renderCards() {
     if (card.collapsed) {
       // While GPT-4o still processes this card's audio, say so instead of
       // the misleading "(no dictation captured)" — the text arrives shortly.
+      const engineName = cfg.voiceAiCleanup === 'local-whisper' ? 'Local Whisper' : 'GPT-4o';
       const preview = card.transcribing
-        ? '⏳ Transcribing with GPT-4o…'
+        ? `⏳ Transcribing with ${engineName}…`
         : ((card.text || '').trim().slice(0, 140) || '(no dictation captured)');
       const more = (!card.transcribing && (card.text || '').length > 140) ? '…' : '';
       const tag = card.result ? ' · generated' : (card.transcribing ? ' · transcribing…' : ' · dictated');
@@ -318,17 +319,18 @@ async function maybeTranscribeCardWithGpt4o(card, baseTxt, audioBlob) {
   renderCards();
   _refreshSessionPipStatuses();
 
+  const engineName = cfg.voiceAiCleanup === 'local-whisper' ? 'Local Whisper' : 'GPT-4o';
   try {
     const snapshot = card.text || '';
     const btn = document.getElementById('mic-' + card.id);
-    if (btn && !card.isRec) { btn.textContent = '🤖'; btn.title = 'Transcribing with GPT-4o…'; }
+    if (btn && !card.isRec) { btn.textContent = '🤖'; btn.title = `Transcribing with ${engineName}…`; }
 
     let transcribed = '';
     try {
       const hint = typeof transcribeLanguageHint === 'function' ? transcribeLanguageHint(sessionLang) : '';
       transcribed = await transcribeAudio(audioBlob, hint);
     } catch (e) {
-      try { toast('⚠ GPT-4o transcription failed — keeping browser transcript (' + e.message + ')'); } catch {}
+      try { toast(`⚠ ${engineName} transcription failed — keeping browser transcript (` + e.message + ')'); } catch {}
     }
 
     const btnAfter = document.getElementById('mic-' + card.id);
@@ -342,7 +344,7 @@ async function maybeTranscribeCardWithGpt4o(card, baseTxt, audioBlob) {
     card.text = (baseTxt ? baseTxt + ' ' : '') + transcribed;
     const ta = document.getElementById('txt-' + card.id);
     if (ta) ta.value = card.text;
-    try { toast('✓ GPT-4o transcript applied'); } catch {}
+    try { toast(`✓ ${engineName} transcript applied`); } catch {}
   } finally {
     // Flip ⏳ → DICTATED (or back to EMPTY on failure) on both surfaces,
     // regardless of which early-return path was taken.
@@ -946,15 +948,16 @@ function showSessionPipTranscribing() {
   const label = doc.getElementById('spipLabel');
   const dot   = doc.getElementById('spipDot');
   const body  = doc.getElementById('spipBody');
+  const engineName = cfg.voiceAiCleanup === 'local-whisper' ? 'Local Whisper' : 'GPT-4o';
   if (pause) { pause.disabled = true; pause.innerHTML = '<span class="pip-spin"></span> Transcribing…'; }
   if (stop)  { stop.disabled = true; }
-  if (label) label.textContent = 'Transcribing with GPT-4o…';
+  if (label) label.textContent = `Transcribing with ${engineName}…`;
   if (dot)   { dot.classList.remove('paused'); dot.classList.add('transcribing'); }
   if (body)  {
     body.classList.add('empty');
     body.innerHTML =
       '<div class="pip-rec"><span class="pip-spin pip-spin-lg"></span>' +
-      '<div class="pip-rec-label">Transcribing with GPT-4o…</div></div>';
+      `<div class="pip-rec-label">Transcribing with ${engineName}…</div></div>`;
   }
 }
 
