@@ -357,12 +357,29 @@ git commit -m "feat(server): transcription proxy to the whisper container"
 - Consumes: `effectiveBackendUrl()` + `detectBackend()` from js/config.js; `transcribeWithGpt4o(audioBlob, languageHint)` in js/ai.js; `transcribeLanguageHint(lang)`; context-words glossary via `cfg.contextWords` (array of `{term}` objects — verify actual shape in js/context.js and use its terms).
 - Produces: `transcribeAudio(audioBlob, languageHint)` — dispatcher used by all call sites; `isAudioTranscribeMode()` (js/config.js) → true when mode is `gpt4o-transcribe` OR `local-whisper`.
 
-- [ ] **Step 1: index.html — third toggle button**
+- [ ] **Step 1: index.html — third toggle button + polish checkbox**
 
 After the `vcGpt4oTranscribe` button (line ~213) add:
 ```html
             <button class="lang-btn" id="vcLocalWhisper" onclick="setVoiceCleanup('local-whisper')" style="display:none">🏠 Local Whisper</button>
 ```
+Below the Dictation mode toggle row (inside the same card body, after the explanatory text block) add:
+```html
+          <label style="display:flex;align-items:center;gap:8px;margin-top:10px;font-size:12px;color:var(--muted);cursor:pointer">
+            <input type="checkbox" id="polishChk" onchange="setTranscriptPolish(this.checked)" style="width:auto;min-height:0">
+            ✨ AI polish after transcription — an LLM fixes typos &amp; misheard words (uses your API key)
+          </label>
+```
+
+In `js/config.js` add near the voiceAiCleanup handlers:
+```js
+function setTranscriptPolish(on) {
+  cfg.transcriptPolish = !!on;
+  localStorage.setItem('bra_cfg', JSON.stringify(cfg));
+  toast(on ? '✓ Transcripts get an AI polish pass' : '✓ Raw transcripts (no AI polish)');
+}
+```
+Default the setting to true: in the cfg migration section add `if (typeof cfg.transcriptPolish !== 'boolean') cfg.transcriptPolish = true;` and in the Setup render section set `document.getElementById('polishChk').checked = cfg.transcriptPolish !== false;` (guard for element existence following the file's style). Also add `transcriptPolish: true` to `DEFAULTS` in js/state.js if a DEFAULTS object defines cfg defaults there (check js/state.js:144 area).
 
 - [ ] **Step 2: js/config.js — 3-way mode + visibility**
 
@@ -455,13 +472,36 @@ async function transcribeWithLocalWhisper(audioBlob, languageHint) {
   return String(data.text || '').trim();
 }
 
+// AI "agent eye": fix STT typos/misheard words. Never blocks — on any
+// failure (no key, network, provider error) the raw transcript is returned.
+async function polishTranscript(text) {
+  if (!cfg.transcriptPolish || !apiKey || !text) return text;
+  const terms = (cfg.contextWords || []).map(w => w && (w.term || w)).filter(Boolean);
+  const sys =
+    'You fix speech-to-text recognition errors in QA bug dictations. ' +
+    'Correct misheard words, typos and broken product terms only. ' +
+    (terms.length ? `Prefer these exact spellings when a word sounds like one of them: ${terms.join(', ')}. ` : '') +
+    'Keep the original language (Ukrainian stays Ukrainian, English stays English), keep the meaning, ' +
+    'do NOT add, summarize or restructure anything. Reply with ONLY the corrected text.';
+  try {
+    const out = await callAi(sys, text);
+    const cleaned = String(out || '').trim();
+    return cleaned || text;
+  } catch (e) {
+    console.warn('Transcript polish skipped:', e.message || e);
+    return text;
+  }
+}
+
 // Single entry point for the record-then-transcribe modes.
 async function transcribeAudio(audioBlob, languageHint) {
-  return cfg.voiceAiCleanup === 'local-whisper'
-    ? transcribeWithLocalWhisper(audioBlob, languageHint)
-    : transcribeWithGpt4o(audioBlob, languageHint);
+  const raw = cfg.voiceAiCleanup === 'local-whisper'
+    ? await transcribeWithLocalWhisper(audioBlob, languageHint)
+    : await transcribeWithGpt4o(audioBlob, languageHint);
+  return polishTranscript(raw);
 }
 ```
+Check how `callAi` returns its result (js/ai.js:126-176) — if it returns parsed JSON or an object rather than plain text, adapt the `out` handling to extract the assistant text.
 Adapt the `cfg.contextWords` access to the real glossary shape found in js/context.js (use its accessor if one exists).
 
 - [ ] **Step 4: Widen the call sites**

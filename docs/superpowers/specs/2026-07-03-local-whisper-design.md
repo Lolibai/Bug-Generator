@@ -73,6 +73,22 @@ browser (MediaRecorder blob)
 - Falls back with the existing error toast pattern if transcription fails;
   nothing recorded is lost (same guarantee the GPT-4o mode gives).
 
+### 4. AI transcript polish (addendum)
+
+Raw STT output (either engine) gets an optional LLM "agent eye" pass that
+fixes typos, misheard words and drift before the text lands in the input:
+
+- `cfg.transcriptPolish` (default `true`), toggled by a checkbox in the
+  Setup → Dictation card: "✨ AI polish after transcription".
+- Applied inside `transcribeAudio()` after the engine returns text and
+  after the existing glossary `correctTranscript()` pass, via the existing
+  `callAi(systemPrompt, userText)` helper (works with both Anthropic and
+  OpenRouter providers). The prompt: fix speech-recognition errors only,
+  respect the context-words glossary spellings, keep the original language
+  and meaning, add nothing, return only the corrected text.
+- Skipped silently when no API key is configured or the call fails
+  (console.warn) — the raw transcript is never lost or blocked.
+
 ## Error handling
 
 - Whisper container down → status endpoint hides the mode; an in-flight
