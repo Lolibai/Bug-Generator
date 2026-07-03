@@ -64,6 +64,17 @@ function buildNormalPlainText(r) {
   return parts.filter(p => p !== '').join('\n\n') + buildLinkedWorkItemsText(r);
 }
 
+// True when a Jira call can succeed: local creds in this browser, OR a
+// Node-backend proxy (explicit Backend URL or auto-detected same-origin)
+// that fills credentials from its own store / .env. Pre-flight guards must
+// use this instead of checking cfg.jira* directly — env-first setups have
+// empty local fields on purpose.
+function jiraReady() {
+  if (cfg.jiraUrl && cfg.jiraEmail && cfg.jiraToken) return true;
+  if ((cfg.backendUrl || '').trim()) return true;
+  return typeof autoBackend !== 'undefined' && !!autoBackend;
+}
+
 // ── unified Jira request helper ───────────────────────────────────────────
 // If cfg.proxyUrl is set → POSTs to the proxy with the request envelope.
 // If empty → tries to call Jira directly (will fail in Cloud due to CORS,
@@ -438,7 +449,7 @@ function shapeJiraValue(jiraId, value, fieldName = '') {
 // ── create issue ──────────────────────────────────────────────────────────
 async function pushToJira() {
   if (!lastRep) return;
-  if (!cfg.jiraUrl || !cfg.jiraEmail || !cfg.jiraToken) {
+  if (!jiraReady()) {
     toast('⚠ Fill in Jira connection in Setup first');
     showPage('setup');
     return;

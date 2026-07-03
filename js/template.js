@@ -53,7 +53,7 @@ function isEnvironmentField(name, jiraId) {
 // customfield_NNNNN IDs used by the REST API. Gracefully returns null when
 // Jira creds / proxy are not configured.
 async function fetchAllJiraFields() {
-  if (!cfg.jiraUrl || !cfg.jiraEmail || !cfg.jiraToken) return null;
+  if (!jiraReady()) return null;
   try {
     const data = await jiraRequest('/rest/api/3/field');
     return Array.isArray(data) ? data : null;
@@ -378,7 +378,7 @@ async function fetchTemplateFromLink() {
     return;
   }
 
-  if (!cfg.jiraUrl || !cfg.jiraEmail || !cfg.jiraToken) {
+  if (!jiraReady()) {
     toast('⚠ Configure Jira connection in Setup first');
     showPage('setup');
     return;
