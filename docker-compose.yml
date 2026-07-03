@@ -13,6 +13,7 @@ services:
       OPENROUTER_API_KEY: ${OPENROUTER_API_KEY:-}
       OPENROUTER_MODEL: ${OPENROUTER_MODEL:-anthropic/claude-3.5-haiku}
       HOST_IP: ${HOST_IP:-}
+      WHISPER_URL: http://whisper:9000
     depends_on:
       mongo:
         condition: service_healthy
@@ -29,5 +30,21 @@ services:
       retries: 12
     restart: unless-stopped
 
+  whisper:
+    build: ./whisper
+    environment:
+      WHISPER_MODEL: ${WHISPER_MODEL:-large-v3-turbo}
+      WHISPER_DEVICE: ${WHISPER_DEVICE:-auto}
+    volumes:
+      - whisper-models:/models
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request;urllib.request.urlopen('http://localhost:9000/healthz')"]
+      interval: 15s
+      timeout: 5s
+      retries: 20
+      start_period: 120s
+    restart: unless-stopped
+
 volumes:
   mongo-data:
+  whisper-models:
