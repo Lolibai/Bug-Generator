@@ -462,6 +462,35 @@ To find a user's `accountId`: in Jira, open their profile and check the URL
 If your project's create-screen doesn't expose **priority**, the first
 request will fail and the app will automatically retry without priority.
 
+### Local Whisper dictation (free, private, GPU)
+
+The docker stack includes a `whisper` container (faster-whisper,
+`large-v3-turbo` by default) so dictation can be transcribed on your own
+hardware — no cloud key, strong Ukrainian support.
+
+It runs on CPU out of the box — MacBook Pros and any other host work with
+plain `docker compose up -d --build` (expect ~5-20 s per dictation on CPU;
+Mac users pointing at the team's LAN server don't run it at all). First
+start downloads the model (~1.5 GB, cached in a volume). Want maximum
+accuracy? Set `WHISPER_MODEL=large-v3` in `.env`.
+
+**NVIDIA GPU host (near-instant transcription):** install the container
+toolkit once, then enable the GPU override:
+
+```bash
+sudo apt-get install -y nvidia-container-toolkit
+sudo nvidia-ctk runtime configure --runtime=docker
+sudo systemctl restart docker
+# in .env:
+# COMPOSE_FILE=docker-compose.yml:docker-compose.gpu.yml
+docker compose up -d --build
+```
+
+In **⚙️ Setup → Dictation** a **🏠 Local Whisper** option appears when the
+service is healthy — recording works like GPT-4o Transcribe (transcript
+appears after Pause/Stop), but audio never leaves your network. Your
+Context words glossary is passed to Whisper as a recognition hint.
+
 ## Project structure
 
 ```
