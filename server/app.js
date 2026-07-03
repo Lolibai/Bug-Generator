@@ -8,6 +8,7 @@ import { jiraRouter } from './routes/jira.js';
 import { infoRouter } from './routes/info.js';
 import { settingsRouter } from './routes/settings.js';
 import { transcribeRouter } from './routes/transcribe.js';
+import { aiRouter } from './routes/ai.js';
 
 const ROOT = path.join(path.dirname(fileURLToPath(import.meta.url)), '..');
 
@@ -29,6 +30,7 @@ export function createApp(db, { fetchImpl = fetch, env = process.env } = {}) {
   app.use('/api/info', infoRouter({ env }));
   app.use('/api/settings', settingsRouter(db));
   app.use('/api/transcribe', transcribeRouter({ fetchImpl, env }));
+  app.use('/api/ai', aiRouter({ fetchImpl, env }));
 
   app.use('/api', (_req, res) => res.status(404).json({ error: 'Not found' }));
 
