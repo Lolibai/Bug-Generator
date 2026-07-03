@@ -241,3 +241,16 @@ a.lwi-open:hover{background:var(--accent-dim)}
 .linked-block-title{font-size:11px;font-family:'IBM Plex Mono',monospace;color:var(--muted);text-transform:uppercase;letter-spacing:.06em}
 .linked-block-count{font-size:11px;font-family:'IBM Plex Mono',monospace;color:var(--dim);flex:1}
 .linked-block-empty{font-size:12px;color:var(--dim);font-family:'IBM Plex Mono',monospace;padding:2px 0}
+
+/* ── Connection status (Setup card + aggregate dots) ──────────────────── */
+.conn-row{display:flex;align-items:center;gap:9px;padding:6px 0;font-size:13px;border-bottom:0.5px solid var(--border)}
+.conn-row:last-child{border-bottom:none}
+.conn-ico{width:18px;text-align:center;flex-shrink:0}
+.conn-row.ok .conn-ico{color:var(--green)}
+.conn-row.warn .conn-ico{color:var(--amber)}
+.conn-row.bad .conn-ico{color:var(--red)}
+.conn-detail{margin-left:auto;font-size:11px;font-family:'IBM Plex Mono',monospace;color:var(--muted);text-align:right}
+.status-dot{display:inline-block;width:8px;height:8px;border-radius:50%;background:var(--dim);margin-left:6px;vertical-align:middle}
+.status-dot.ok{background:var(--green)}
+.status-dot.warn{background:var(--amber)}
+.status-dot.bad{background:var(--red)}

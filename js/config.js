@@ -732,6 +732,20 @@ function updateProjSub() {
 // Explicit cfg.backendUrl always wins over the auto-detected origin.
 let autoBackend = '';
 
+// Server-side AI key info (from /api/ai/status). When available, ALL LLM
+// calls route through the backend — .env has top priority over browser keys.
+let serverAi = { available: false, provider: null, model: null };
+
+async function refreshServerAi() {
+  const base = effectiveBackendUrl();
+  if (!base) { serverAi = { available: false, provider: null, model: null }; return; }
+  try {
+    serverAi = await (await fetch(base + '/api/ai/status')).json();
+  } catch {
+    serverAi = { available: false, provider: null, model: null };
+  }
+}
+
 function effectiveBackendUrl() {
   return (cfg.backendUrl || autoBackend || '').trim().replace(/\/+$/, '');
 }
@@ -743,9 +757,12 @@ async function detectBackend() {
     const j = await r.json();
     if (j && j.ok) autoBackend = location.origin;
   } catch { /* static hosting — no backend here */ }
+  await refreshServerAi();
   renderLanHint();
   renderServerJiraStatus();
   renderLocalWhisperOption();
+  if (typeof updateApiBtn === 'function') updateApiBtn();
+  refreshConnectionStatus();
 }
 
 // "📱 Phone access" link in Setup: LAN IP from the backend + our own port.
@@ -804,3 +821,85 @@ async function saveJiraToServer() {
 }
 
 document.addEventListener('DOMContentLoaded', detectBackend);
+
+// ── connection status card + aggregate dot ───────────────────────────────
+function setConnRow(id, state, icon, detail) {
+  const row = document.getElementById(id);
+  if (!row) return;
+  row.classList.remove('ok', 'warn', 'bad');
+  row.classList.add(state);
+  row.querySelector('.conn-ico').textContent = icon;
+  row.querySelector('.conn-detail').textContent = detail;
+}
+
+async function refreshConnectionStatus() {
+  const base = effectiveBackendUrl();
+  const states = {}; // row → 'ok'|'warn'|'bad'
+  const mark = (key, id, state, icon, detail) => { states[key] = state; setConnRow(id, state, icon, detail); };
+
+  const checks = [];
+
+  if (!base) {
+    mark('backend', 'cs-backend', 'warn', '⚠', 'no backend — localStorage only');
+    mark('db', 'cs-db', 'warn', '⚠', 'n/a');
+    mark('whisper', 'cs-whisper', 'warn', '⚠', 'n/a');
+  } else {
+    checks.push(fetch(base + '/health').then(r => r.json()).then(j => {
+      mark('backend', 'cs-backend', 'ok', '✓', base);
+      mark('db', 'cs-db', j.mongo ? 'ok' : 'bad', j.mongo ? '✓' : '✕', j.mongo ? 'MongoDB connected' : 'MongoDB unreachable');
+    }).catch(() => {
+      mark('backend', 'cs-backend', 'bad', '✕', 'unreachable: ' + base);
+      mark('db', 'cs-db', 'bad', '✕', 'unknown');
+    }));
+    checks.push(fetch(base + '/api/transcribe/status').then(r => r.json()).then(j => {
+      if (j.ok) mark('whisper', 'cs-whisper', 'ok', '✓', `${j.model} · ${j.device}`);
+      else mark('whisper', 'cs-whisper', 'warn', '⚠', 'service not running');
+    }).catch(() => mark('whisper', 'cs-whisper', 'warn', '⚠', 'service not running')));
+  }
+
+  // AI: server key beats browser key.
+  checks.push((async () => {
+    await refreshServerAi();
+    if (serverAi.available) mark('ai', 'cs-ai', 'ok', '✓', `server key · ${serverAi.provider}/${serverAi.model}`);
+    else if (apiKey) mark('ai', 'cs-ai', 'ok', '✓', "this browser's key · " + provider);
+    else mark('ai', 'cs-ai', 'bad', '✕', 'no AI key — set in .env or sidebar');
+    if (typeof updateApiBtn === 'function') updateApiBtn();
+  })());
+
+  // Jira: source + live /myself auth check.
+  checks.push((async () => {
+    let source = 'none';
+    if (base) {
+      try {
+        const j = await (await fetch(base + '/api/settings/jira')).json();
+        source = j.source || 'none';
+      } catch { /* backend without settings API */ }
+    }
+    if (source === 'none' && !(cfg.jiraUrl && cfg.jiraEmail && cfg.jiraToken)) {
+      mark('jira', 'cs-jira', 'bad', '✕', 'not configured');
+      return;
+    }
+    const srcLbl = source === 'env' ? '.env' : source === 'server' ? 'stored on server' : 'this browser';
+    try {
+      const me = await jiraRequest('/rest/api/3/myself');
+      const name = me && (me.displayName || me.emailAddress) || 'authenticated';
+      mark('jira', 'cs-jira', 'ok', '✓', `${srcLbl} · ${name}`);
+    } catch {
+      mark('jira', 'cs-jira', 'warn', '⚠', `${srcLbl} · configured, not verified`);
+    }
+  })());
+
+  await Promise.allSettled(checks);
+
+  // Aggregate dot: green = core all ok; red = generation impossible; else amber.
+  const core = ['backend', 'db', 'ai', 'jira'];
+  const dotState = states.ai === 'bad' ? 'bad' : core.every(k => states[k] === 'ok') ? 'ok' : 'warn';
+  const notOk = Object.entries(states).filter(([, s]) => s !== 'ok').map(([k]) => k).join(', ');
+  ['statusDotSidebar', 'statusDotTab'].forEach(id => {
+    const d = document.getElementById(id);
+    if (!d) return;
+    d.classList.remove('ok', 'warn', 'bad');
+    d.classList.add(dotState);
+    d.title = dotState === 'ok' ? 'All services connected' : 'Attention: ' + notOk;
+  });
+}

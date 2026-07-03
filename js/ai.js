@@ -124,6 +124,18 @@ ${JSON.stringify({ summary: '...', severity: 'Critical|High|Medium|Low', environ
 // Resolves to the raw model text (the JSON the system prompt asked for).
 // Throws on non-2xx responses with a human-readable message.
 async function callAi(systemPrompt, userText) {
+  // .env-first: when the server holds an AI key, every browser uses it.
+  if (typeof serverAi !== 'undefined' && serverAi.available) {
+    const res = await fetch(effectiveBackendUrl() + '/api/ai', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ system: systemPrompt, user: userText }),
+    });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) throw new Error(data.error || `HTTP ${res.status}`);
+    return String(data.text || '');
+  }
+
   if (provider === 'openrouter') {
     const res = await fetch('https://openrouter.ai/api/v1/chat/completions', {
       method: 'POST',

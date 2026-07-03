@@ -24,6 +24,9 @@ function showPage(n) {
   if (n === 'context' && typeof renderContextWords === 'function') {
     renderContextWords();
   }
+  if (n === 'setup' && typeof refreshConnectionStatus === 'function') {
+    refreshConnectionStatus();
+  }
 }
 
 // ── Report sub-tabs (Single Report / Batch Report) ────────────────────────
@@ -72,6 +75,17 @@ function promptKey() {
 }
 
 function updateApiBtn() {
+  if (typeof serverAi !== 'undefined' && serverAi.available) {
+    document.querySelectorAll('[data-api-btn]').forEach(btn => {
+      const icon = btn.querySelector('[data-api-icon]');
+      const lbl  = btn.querySelector('[data-api-lbl]');
+      if (icon) icon.textContent = '●';
+      if (lbl)  lbl.textContent  = 'Server key (.env)';
+      btn.classList.add('set');
+      btn.title = 'The server\'s .env key is used for everyone. A personal key only applies if the server key is removed.';
+    });
+    return;
+  }
   const name = provider === 'openrouter' ? 'OpenRouter key' : 'Anthropic key';
   document.querySelectorAll('[data-api-btn]').forEach(btn => {
     const icon = btn.querySelector('[data-api-icon]');

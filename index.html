@@ -12,7 +12,7 @@
   <aside class="sidebar">
     <div class="sidebar-logo">
       <div class="logo-mark">🐛</div>
-      <div class="logo-name">bug-report-agent</div>
+      <div class="logo-name">bug-report-agent<span class="status-dot" id="statusDotSidebar" title=""></span></div>
       <div class="logo-ver">v1.0</div>
     </div>
     <nav class="nav">
@@ -156,6 +156,20 @@
     <div class="page" id="page-setup">
       <div class="page-title">Project setup</div>
       <div class="page-sub">Configure once — saved in your browser. Export JSON to share with the team.</div>
+
+      <div class="card">
+        <div class="card-head">
+          <span class="card-title">Connection status</span>
+          <button class="btn btn-ghost btn-sm" onclick="refreshConnectionStatus()">↻ Check all</button>
+        </div>
+        <div class="card-body" id="connStatus">
+          <div class="conn-row" id="cs-backend"><span class="conn-ico">…</span> Backend <span class="conn-detail"></span></div>
+          <div class="conn-row" id="cs-db"><span class="conn-ico">…</span> Database <span class="conn-detail"></span></div>
+          <div class="conn-row" id="cs-ai"><span class="conn-ico">…</span> AI <span class="conn-detail"></span></div>
+          <div class="conn-row" id="cs-jira"><span class="conn-ico">…</span> Jira <span class="conn-detail"></span></div>
+          <div class="conn-row" id="cs-whisper"><span class="conn-ico">…</span> Whisper <span class="conn-detail"></span></div>
+        </div>
+      </div>
 
       <!-- Mobile-only: provider + API key live in the sidebar on desktop. -->
       <div class="card mobile-only">
@@ -412,7 +426,7 @@
 <nav class="tabbar" id="tabbar">
   <button class="tab-item active" id="tab-report"   onclick="showPage('report')"><span class="tab-ico">📝</span><span class="tab-lbl">Report</span></button>
   <button class="tab-item"        id="tab-template" onclick="showPage('template')"><span class="tab-ico">📋</span><span class="tab-lbl">Template</span></button>
-  <button class="tab-item"        id="tab-setup"    onclick="showPage('setup')"><span class="tab-ico">⚙️</span><span class="tab-lbl">Setup</span></button>
+  <button class="tab-item"        id="tab-setup"    onclick="showPage('setup')"><span class="tab-ico">⚙️</span><span class="tab-lbl">Setup</span><span class="status-dot" id="statusDotTab" title=""></span></button>
   <button class="tab-item"        id="tab-history"  onclick="showPage('history')"><span class="tab-ico">🕓</span><span class="tab-lbl">History</span></button>
   <button class="tab-item"        id="tab-context"  onclick="showPage('context')"><span class="tab-ico">🔤</span><span class="tab-lbl">Context</span></button>
 </nav>
